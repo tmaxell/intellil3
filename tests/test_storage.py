@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from l3store.core.types import KVCacheBlock, RAGObject, SemanticCacheEntry
 
@@ -83,6 +84,24 @@ class TestRAGStorage:
         assert loaded_obj.embedding_dim == 384
         np.testing.assert_allclose(loaded_emb, embedding, rtol=1e-6)
 
+    def test_delete(self, store):
+        embedding = np.random.randn(384).astype(np.float32)
+        obj = RAGObject(document_id="doc_del")
+
+        obj_id = store.put_rag_object(obj, embedding)
+        assert store.delete_rag_object(obj_id) is True
+        assert store.get_rag_object(obj_id) is None
+
+    def test_list(self, store):
+        ids = []
+        for i in range(3):
+            emb = np.zeros(64, dtype=np.float32)
+            obj = RAGObject(document_id=f"doc_{i}", chunk_index=i)
+            ids.append(store.put_rag_object(obj, emb))
+
+        listed = store.list_rag_objects()
+        assert set(ids) == set(listed)
+
 
 class TestSemanticCacheStorage:
 
@@ -102,11 +121,32 @@ class TestSemanticCacheStorage:
         assert loaded_entry.prompt_text == "What is quantum computing?"
         assert loaded_entry.embedding_dim == 768
 
+    def test_delete(self, store):
+        embedding = np.random.randn(128).astype(np.float32)
+        entry = SemanticCacheEntry(prompt_text="test")
+
+        obj_id = store.put_semantic_entry(entry, embedding)
+        assert store.delete_semantic_entry(obj_id) is True
+        assert store.get_semantic_entry(obj_id) is None
+
+    def test_list(self, store):
+        ids = []
+        for i in range(2):
+            emb = np.zeros(64, dtype=np.float32)
+            entry = SemanticCacheEntry(prompt_text=f"prompt_{i}")
+            ids.append(store.put_semantic_entry(entry, emb))
+
+        listed = store.list_semantic_entries()
+        assert set(ids) == set(listed)
+
 
 class TestStats:
 
     def test_empty(self, store):
-        assert store.stats()["kv_cache_blocks"] == 0
+        s = store.stats()
+        assert s["kv_cache_blocks"] == 0
+        assert s["rag_objects"] == 0
+        assert s["semantic_cache_entries"] == 0
 
     def test_after_inserts(self, store):
         k = np.zeros((1, 4, 2, 8), dtype=np.float32)
@@ -114,4 +154,37 @@ class TestStats:
         store.put_kv_block(KVCacheBlock(model_name="t"), k, v)
         store.put_kv_block(KVCacheBlock(model_name="t"), k, v)
 
-        assert store.stats()["kv_cache_blocks"] == 2
+        emb = np.zeros(64, dtype=np.float32)
+        store.put_rag_object(RAGObject(document_id="d"), emb)
+
+        s = store.stats()
+        assert s["kv_cache_blocks"] == 2
+        assert s["rag_objects"] == 1
+        assert s["semantic_cache_entries"] == 0
+
+
+class TestPartialWriteCleanup:
+
+    def test_meta_cleaned_on_data_failure(self, store):
+        block = KVCacheBlock(model_name="test", token_ids=[1, 2])
+        prefix = store._config.objects.kv_cache.key_prefix
+        obj_id = block.meta.object_id
+
+        original_put = store._backend.put
+        call_count = 0
+
+        def failing_put(key, data, metadata=None):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:
+                raise ConnectionError("simulated failure")
+            return original_put(key, data, metadata)
+
+        store._backend.put = failing_put
+
+        with pytest.raises(ConnectionError):
+            store.put_kv_block(block, np.zeros((1, 4, 2, 8)), np.zeros((1, 4, 2, 8)))
+
+        assert not store._backend.exists(f"{prefix}{obj_id}.meta.json")
+
+        store._backend.put = original_put
