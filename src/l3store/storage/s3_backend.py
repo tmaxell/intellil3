@@ -57,15 +57,28 @@ class S3Backend(StorageBackend):
             resp = self._client.get_object(Bucket=self._bucket, Key=key)
             return resp["Body"].read()
         except ClientError as e:
-            if e.response["Error"]["Code"] == "NoSuchKey":
+            if e.response["Error"]["Code"] in ("NoSuchKey", "404"):
                 return None
             raise
 
     def delete(self, key: str) -> bool:
-        if not self.exists(key):
-            return False
+        existed = self.exists(key)
         self._client.delete_object(Bucket=self._bucket, Key=key)
-        return True
+        return existed
+
+    def delete_many(self, keys: list[str]) -> int:
+        if not keys:
+            return 0
+        batch_size = 1000  # S3 limit
+        deleted = 0
+        for i in range(0, len(keys), batch_size):
+            batch = keys[i : i + batch_size]
+            resp = self._client.delete_objects(
+                Bucket=self._bucket,
+                Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
+            )
+            deleted += len(batch) - len(resp.get("Errors", []))
+        return deleted
 
     def exists(self, key: str) -> bool:
         try:
