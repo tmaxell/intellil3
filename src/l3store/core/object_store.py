@@ -5,7 +5,8 @@ from typing import Optional
 
 import numpy as np
 
-from l3store.core.types import KVCacheBlock, RAGObject, SemanticCacheEntry
+from l3store.core.types import KVCacheBlock, ObjectType, RAGObject, SemanticCacheEntry
+from l3store.metadata.metadata_store import MetadataStore
 from l3store.storage.backend import StorageBackend
 from l3store.storage.serialization import Serializer
 from l3store.utils.config import L3Config
@@ -15,10 +16,20 @@ logger = logging.getLogger(__name__)
 
 class UnifiedObjectStore:
 
-    def __init__(self, backend: StorageBackend, config: L3Config):
+    def __init__(
+        self,
+        backend: StorageBackend,
+        config: L3Config,
+        metadata: MetadataStore | None = None,
+    ):
         self._backend = backend
         self._config = config
+        self._metadata = metadata or MetadataStore()
         self._backend.ensure_bucket()
+
+    @property
+    def metadata(self) -> MetadataStore:
+        return self._metadata
 
     def _put_pair(self, meta_key: str, meta_bytes: bytes, data_key: str, data_bytes: bytes) -> None:
         self._backend.put(meta_key, meta_bytes)
@@ -73,6 +84,10 @@ class UnifiedObjectStore:
             Serializer.serialize_kv_tensors(key_states, value_states),
         )
 
+        self._metadata.on_object_added(
+            ObjectType.KV_CACHE, obj_id, token_ids=block.token_ids or None
+        )
+
         logger.info(
             "Stored KV block %s (%d tokens, %.1f KB)",
             obj_id, len(block.token_ids), block.meta.size_bytes / 1024,
@@ -80,6 +95,9 @@ class UnifiedObjectStore:
         return obj_id
 
     def get_kv_block(self, object_id: str) -> Optional[tuple[KVCacheBlock, np.ndarray, np.ndarray]]:
+        if not self._metadata.might_exist(object_id):
+            return None
+
         prefix = self._config.objects.kv_cache.key_prefix
         pair = self._get_pair(f"{prefix}{object_id}.meta.json", f"{prefix}{object_id}.data.npz")
         if pair is None:
@@ -91,10 +109,21 @@ class UnifiedObjectStore:
         return block, key_states, value_states
 
     def delete_kv_block(self, object_id: str) -> bool:
-        return self._delete_pair(self._config.objects.kv_cache.key_prefix, object_id, "data.npz")
+        result = self._delete_pair(self._config.objects.kv_cache.key_prefix, object_id, "data.npz")
+        if result:
+            self._metadata.on_object_removed(ObjectType.KV_CACHE, object_id)
+        return result
 
     def list_kv_blocks(self) -> list[str]:
         return self._list_ids(self._config.objects.kv_cache.key_prefix)
+
+    def find_kv_prefix_matches(self, token_ids: list[int]) -> list[str]:
+        matches = self._metadata.find_prefix_matches(token_ids)
+        return [m.object_id for m in matches]
+
+    def find_kv_longest_prefix(self, token_ids: list[int]) -> str | None:
+        match = self._metadata.find_longest_prefix(token_ids)
+        return match.object_id if match else None
 
     # ── RAG ──────────────────────────────────────────────
 
@@ -111,10 +140,15 @@ class UnifiedObjectStore:
             Serializer.serialize_embedding(embedding),
         )
 
+        self._metadata.on_object_added(ObjectType.RAG, obj_id)
+
         logger.info("Stored RAG object %s (doc=%s)", obj_id, obj.document_id)
         return obj_id
 
     def get_rag_object(self, object_id: str) -> Optional[tuple[RAGObject, np.ndarray]]:
+        if not self._metadata.might_exist(object_id):
+            return None
+
         prefix = self._config.objects.rag.key_prefix
         pair = self._get_pair(f"{prefix}{object_id}.meta.json", f"{prefix}{object_id}.data.npy")
         if pair is None:
@@ -126,7 +160,10 @@ class UnifiedObjectStore:
         return obj, embedding
 
     def delete_rag_object(self, object_id: str) -> bool:
-        return self._delete_pair(self._config.objects.rag.key_prefix, object_id, "data.npy")
+        result = self._delete_pair(self._config.objects.rag.key_prefix, object_id, "data.npy")
+        if result:
+            self._metadata.on_object_removed(ObjectType.RAG, object_id)
+        return result
 
     def list_rag_objects(self) -> list[str]:
         return self._list_ids(self._config.objects.rag.key_prefix)
@@ -146,10 +183,15 @@ class UnifiedObjectStore:
             Serializer.serialize_embedding(prompt_embedding),
         )
 
+        self._metadata.on_object_added(ObjectType.SEMANTIC_CACHE, obj_id)
+
         logger.info("Stored semantic cache entry %s", obj_id)
         return obj_id
 
     def get_semantic_entry(self, object_id: str) -> Optional[tuple[SemanticCacheEntry, np.ndarray]]:
+        if not self._metadata.might_exist(object_id):
+            return None
+
         prefix = self._config.objects.semantic_cache.key_prefix
         pair = self._get_pair(f"{prefix}{object_id}.meta.json", f"{prefix}{object_id}.data.npy")
         if pair is None:
@@ -161,7 +203,10 @@ class UnifiedObjectStore:
         return entry, embedding
 
     def delete_semantic_entry(self, object_id: str) -> bool:
-        return self._delete_pair(self._config.objects.semantic_cache.key_prefix, object_id, "data.npy")
+        result = self._delete_pair(self._config.objects.semantic_cache.key_prefix, object_id, "data.npy")
+        if result:
+            self._metadata.on_object_removed(ObjectType.SEMANTIC_CACHE, object_id)
+        return result
 
     def list_semantic_entries(self) -> list[str]:
         return self._list_ids(self._config.objects.semantic_cache.key_prefix)
@@ -173,4 +218,5 @@ class UnifiedObjectStore:
             "kv_cache_blocks": len(self.list_kv_blocks()),
             "rag_objects": len(self.list_rag_objects()),
             "semantic_cache_entries": len(self.list_semantic_entries()),
+            "metadata": self._metadata.stats(),
         }
