@@ -3,6 +3,7 @@ import pytest
 from moto import mock_aws
 
 from l3store.core.object_store import UnifiedObjectStore
+from l3store.metadata.metadata_store import MetadataStore
 from l3store.storage.s3_backend import S3Backend
 from l3store.utils.config import L3Config, StorageConfig
 
@@ -39,4 +40,5 @@ def mock_s3(test_config):
 
 @pytest.fixture
 def store(mock_s3, test_config) -> UnifiedObjectStore:
-    return UnifiedObjectStore(backend=mock_s3, config=test_config)
+    metadata = MetadataStore(expected_items=1000, fp_rate=0.01)
+    return UnifiedObjectStore(backend=mock_s3, config=test_config, metadata=metadata)
