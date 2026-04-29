@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 embeddings = [
+    "hnswlib>=0.8",
     "sentence-transformers>=2.2",
     "torch>=2.0",
 ]
