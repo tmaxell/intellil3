@@ -7,7 +7,7 @@ import math
 class BloomFilter:
     """
     Простой bloom filter.
-    Отвечает на вопрос «есть ли object_id в L3» без обращения к S3.
+    Отвечает на вопрос есть ли object_id в L3 без обращения к S3.
     False positive возможен, false negative — нет.
     """
 
