@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from l3store.core.types import KVCacheBlock, RAGObject, SemanticCacheEntry
+from l3store.policies.prefetch import PrefetchDecision
 
 
 class TestKVCacheStorage:
@@ -138,6 +139,54 @@ class TestSemanticCacheStorage:
 
         listed = store.list_semantic_entries()
         assert set(ids) == set(listed)
+
+
+class TestPrefetchBatch:
+
+    def test_prefetch_batch_loads_supported_types(self, store):
+        k = np.zeros((1, 4, 2, 8), dtype=np.float32)
+        v = np.ones((1, 4, 2, 8), dtype=np.float32)
+        kv_id = store.put_kv_block(KVCacheBlock(model_name="test"), k, v)
+
+        rag_emb = np.ones(3, dtype=np.float32)
+        rag_id = store.put_rag_object(RAGObject(document_id="doc"), rag_emb)
+
+        sem_emb = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        sem_id = store.put_semantic_entry(
+            SemanticCacheEntry(prompt_text="prompt", response_text="response"),
+            sem_emb,
+        )
+
+        results = store.prefetch_batch(
+            [
+                PrefetchDecision(kv_id, 1.0, "kv_cache"),
+                PrefetchDecision(rag_id, 0.8, "rag"),
+                PrefetchDecision(sem_id, 0.9, "semantic"),
+            ]
+        )
+
+        assert set(results) == {kv_id, rag_id, sem_id}
+        assert results[kv_id][0].meta.object_id == kv_id
+        assert results[rag_id][0].document_id == "doc"
+        assert results[sem_id][0].response_text == "response"
+
+    def test_prefetch_batch_skips_duplicates_missing_and_unknown(self, store):
+        emb = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        sem_id = store.put_semantic_entry(
+            SemanticCacheEntry(prompt_text="prompt", response_text="response"),
+            emb,
+        )
+
+        results = store.prefetch_batch(
+            [
+                PrefetchDecision(sem_id, 1.0, "semantic"),
+                PrefetchDecision(sem_id, 0.5, "semantic"),
+                PrefetchDecision("missing", 1.0, "semantic"),
+                PrefetchDecision("whatever", 1.0, "unknown"),
+            ]
+        )
+
+        assert list(results) == [sem_id]
 
 
 class TestStats:
