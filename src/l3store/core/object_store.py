@@ -183,7 +183,7 @@ class UnifiedObjectStore:
             Serializer.serialize_embedding(prompt_embedding),
         )
 
-        self._metadata.on_object_added(ObjectType.SEMANTIC_CACHE, obj_id)
+        self._metadata.on_semantic_entry_added(obj_id, prompt_embedding)
 
         logger.info("Stored semantic cache entry %s", obj_id)
         return obj_id

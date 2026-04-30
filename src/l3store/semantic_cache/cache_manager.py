@@ -6,7 +6,6 @@ from collections.abc import Callable
 from l3store.core.object_store import UnifiedObjectStore
 from l3store.core.types import ObjectType, SemanticCacheEntry
 from l3store.embeddings.base import EmbeddingService
-from l3store.metadata.hnsw_index import HNSWIndex
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +18,7 @@ class SemanticCacheManager:
         store: UnifiedObjectStore,
         embedding_service: EmbeddingService,
         similarity_threshold: float = 0.85,
-        max_elements: int = 100_000,
+        max_elements: int | None = None,
         model_name: str = "default",
     ):
         if not 0.0 <= similarity_threshold <= 1.0:
@@ -29,10 +28,7 @@ class SemanticCacheManager:
         self._embeddings = embedding_service
         self._threshold = similarity_threshold
         self._model_name = model_name
-        self._hnsw = HNSWIndex(
-            dim=embedding_service.dimension(),
-            max_elements=max_elements,
-        )
+        self._max_elements = max_elements
 
         self._load_existing_entries()
 
@@ -42,7 +38,7 @@ class SemanticCacheManager:
         generator: Callable[[str], str],
     ) -> tuple[str, bool]:
         prompt_embedding = self._embeddings.embed(prompt)
-        matches = self._hnsw.search(
+        matches = self._store.metadata.search_similar_prompts(
             prompt_embedding,
             k=1,
             threshold=self._threshold,
@@ -64,7 +60,7 @@ class SemanticCacheManager:
                 "Semantic cache index pointed to missing object %s; treating as miss",
                 object_id,
             )
-            self._hnsw.remove(object_id)
+            self._store.metadata.on_object_removed(ObjectType.SEMANTIC_CACHE, object_id)
 
         response = generator(prompt)
         entry = SemanticCacheEntry(
@@ -74,22 +70,22 @@ class SemanticCacheManager:
             similarity_threshold=self._threshold,
         )
         object_id = self._store.put_semantic_entry(entry, prompt_embedding)
-        self._hnsw.add(object_id, prompt_embedding)
 
         logger.info("Semantic cache MISS: cached object_id=%s", object_id)
         return response, False
 
     def search(self, prompt: str, k: int = 5) -> list[tuple[str, float]]:
         prompt_embedding = self._embeddings.embed(prompt)
-        return self._hnsw.search(
+        return self._store.metadata.search_similar_prompts(
             prompt_embedding,
             k=k,
             threshold=self._threshold,
         )
 
     def stats(self) -> dict[str, int | float]:
+        metadata_stats = self._store.metadata.stats()
         return {
-            "indexed_entries": len(self._hnsw),
+            "indexed_entries": int(metadata_stats.get("hnsw_size", 0)),
             "similarity_threshold": self._threshold,
         }
 
@@ -106,7 +102,7 @@ class SemanticCacheManager:
                 continue
 
             _, embedding = cached
-            self._hnsw.add(object_id, embedding)
+            self._store.metadata.on_semantic_entry_added(object_id, embedding)
             loaded += 1
 
         logger.info("Loaded %d semantic cache entries into HNSW", loaded)
