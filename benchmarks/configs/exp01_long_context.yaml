@@ -1,0 +1,19 @@
+experiment:
+  name: "Long Context 32K"
+  description: "Latency and cache hit behavior for long-context requests"
+
+workload:
+  type: "long_context"
+  num_requests: 100
+  context_length: 32768
+  num_users: 20
+  seed: 42
+
+systems:
+  - name: "baseline_vanilla_s3"
+  - name: "baseline_lru_l3"
+  - name: "l3_full"
+
+output:
+  results_path: "benchmarks/results/exp01/results.json"
+  report_path: "benchmarks/results/exp01/report.md"
