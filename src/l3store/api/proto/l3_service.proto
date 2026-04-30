@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package l3store.v1;
 
-import "objects.proto";
+import "l3store/api/proto/objects.proto";
 
 service L3Service {
   rpc PutKVBlock(PutKVBlockRequest) returns (PutKVBlockResponse);

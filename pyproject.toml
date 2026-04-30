@@ -23,7 +23,7 @@ embeddings = [
 grpc = [
     "grpcio>=1.62",
     "grpcio-tools>=1.62",
-    "protobuf>=4.25",
+    "protobuf>=6.31",
 ]
 dev = [
     "pytest>=8.0",
