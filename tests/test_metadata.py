@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from l3store.metadata.prefix_tree import PrefixTree
@@ -172,3 +173,36 @@ class TestMetadataStore:
         s = ms.stats()
         assert s["bloom_count"] == 2
         assert s["prefix_tree_size"] == 1
+
+    def test_semantic_entry_indexing_and_search(self):
+        pytest.importorskip("hnswlib")
+        ms = MetadataStore(expected_items=10)
+        quantum = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        baking = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+
+        ms.on_semantic_entry_added("sem_quantum", quantum)
+        ms.on_semantic_entry_added("sem_baking", baking)
+
+        matches = ms.search_similar_prompts(quantum, k=1, threshold=0.9)
+
+        assert matches[0][0] == "sem_quantum"
+        assert ms.might_exist("sem_quantum") is True
+        assert ms.stats()["hnsw_size"] == 2
+
+    def test_semantic_entry_removal_hides_from_search(self):
+        pytest.importorskip("hnswlib")
+        ms = MetadataStore(expected_items=10, embedding_dim=3)
+        embedding = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+
+        ms.on_semantic_entry_added("sem_1", embedding)
+        ms.on_object_removed(ObjectType.SEMANTIC_CACHE, "sem_1")
+
+        assert ms.search_similar_prompts(embedding, k=1, threshold=0.0) == []
+        assert ms.stats()["hnsw_size"] == 0
+
+    def test_semantic_dimension_mismatch_is_rejected(self):
+        pytest.importorskip("hnswlib")
+        ms = MetadataStore(expected_items=10, embedding_dim=3)
+
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            ms.on_semantic_entry_added("bad", np.ones(4, dtype=np.float32))

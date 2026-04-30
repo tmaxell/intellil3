@@ -7,7 +7,7 @@ from l3store.core.object_store import UnifiedObjectStore
 from l3store.core.types import SemanticCacheEntry
 from l3store.embeddings.base import EmbeddingService
 from l3store.metadata.metadata_store import MetadataStore
-from l3store.semantic_cache import SemanticCacheManager
+from l3store.semantic_cache import SemanticCacheManager, SimilaritySearch
 
 
 class TopicEmbeddingService(EmbeddingService):
@@ -116,3 +116,45 @@ class TestSemanticCacheManager:
                 TopicEmbeddingService(),
                 similarity_threshold=1.5,
             )
+
+    def test_store_put_indexes_entry_in_metadata(self, store):
+        embeddings = TopicEmbeddingService()
+        entry = SemanticCacheEntry(
+            prompt_text="What is quantum computing?",
+            response_text="cached answer",
+            model_name="test",
+        )
+        obj_id = store.put_semantic_entry(entry, embeddings.embed(entry.prompt_text))
+
+        matches = store.metadata.search_similar_prompts(
+            embeddings.embed("Explain qubits"),
+            k=1,
+            threshold=0.8,
+        )
+
+        assert matches[0][0] == obj_id
+
+    def test_similarity_search_uses_metadata_defaults(self, store):
+        embeddings = TopicEmbeddingService()
+        entry = SemanticCacheEntry(
+            prompt_text="Recipe for chocolate cake",
+            response_text="cached answer",
+            model_name="test",
+        )
+        obj_id = store.put_semantic_entry(entry, embeddings.embed(entry.prompt_text))
+        search = SimilaritySearch(
+            store.metadata,
+            default_k=1,
+            default_threshold=0.8,
+        )
+
+        matches = search.search(embeddings.embed("cake recipe"))
+
+        assert matches[0][0] == obj_id
+
+    def test_similarity_search_validates_defaults(self, store):
+        with pytest.raises(ValueError, match="default_k"):
+            SimilaritySearch(store.metadata, default_k=0)
+
+        with pytest.raises(ValueError, match="default_threshold"):
+            SimilaritySearch(store.metadata, default_threshold=1.1)
