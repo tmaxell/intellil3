@@ -4,10 +4,12 @@ from l3store.policies.prefetch.base import (
     RequestContext,
 )
 from l3store.policies.prefetch.semantic_prefetch import SemanticPrefetchPolicy
+from l3store.policies.prefetch.session_prefetch import SessionPrefetchPolicy
 
 __all__ = [
     "PrefetchDecision",
     "PrefetchPolicy",
     "RequestContext",
     "SemanticPrefetchPolicy",
+    "SessionPrefetchPolicy",
 ]
