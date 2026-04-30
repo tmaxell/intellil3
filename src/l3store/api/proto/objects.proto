@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package l3store.v1;
+
+message ObjectMetaProto {
+  string object_id = 1;
+  string object_type = 2;
+  double created_at = 3;
+  double last_accessed = 4;
+  uint64 access_count = 5;
+  uint64 size_bytes = 6;
+  double reuse_score = 7;
+  uint64 ref_count = 8;
+  map<string, string> tags = 9;
+}
+
+message KVCacheBlockProto {
+  ObjectMetaProto meta = 1;
+  string model_name = 2;
+  repeated int32 token_ids = 3;
+  int32 block_index = 4;
+  string token_hash = 5;
+  string parent_block_id = 6;
+  repeated string shared_by_sessions = 7;
+}
+
+message RAGObjectProto {
+  ObjectMetaProto meta = 1;
+  string document_id = 2;
+  int32 chunk_index = 3;
+  string chunk_text = 4;
+  int32 embedding_dim = 5;
+  string source = 6;
+  int32 page_number = 7;
+  bool has_page_number = 8;
+}
+
+message SemanticCacheEntryProto {
+  ObjectMetaProto meta = 1;
+  string prompt_text = 2;
+  string response_text = 3;
+  string model_name = 4;
+  int32 embedding_dim = 5;
+  uint64 reuse_count = 6;
+  double similarity_threshold = 7;
+}
+
+message PrefetchDecisionProto {
+  string object_id = 1;
+  double priority = 2;
+  string prefetch_type = 3;
+}
+
+message SimilarPromptProto {
+  string object_id = 1;
+  double similarity = 2;
+}
