@@ -9,6 +9,7 @@ import grpc
 from l3store.api import converters
 from l3store.api.proto import l3_service_pb2 as pb
 from l3store.api.proto import l3_service_pb2_grpc
+from l3store.api.proto import objects_pb2 as obj_pb
 from l3store.core.object_store import UnifiedObjectStore
 from l3store.policies.prefetch import PrefetchDecision
 from l3store.storage.s3_backend import S3Backend
@@ -81,11 +82,11 @@ class L3ServiceImpl(l3_service_pb2_grpc.L3ServiceServicer):
         matches = self._store.metadata.search_similar_prompts(
             query_embedding,
             k=request.top_k or 5,
-            threshold=request.threshold or 0.7,
+            threshold=request.threshold,
         )
         return pb.SearchSimilarPromptsResponse(
             matches=[
-                pb.SimilarPromptProto(object_id=object_id, similarity=similarity)
+                obj_pb.SimilarPromptProto(object_id=object_id, similarity=similarity)
                 for object_id, similarity in matches
             ]
         )
