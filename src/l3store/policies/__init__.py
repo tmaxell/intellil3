@@ -1,14 +1,24 @@
-from l3store.policies.base import EvictionPolicy, EvictionDecision
+from l3store.policies.base import EvictionDecision, EvictionPolicy
+from l3store.policies.prefetch import (
+    PrefetchDecision,
+    PrefetchPolicy,
+    RequestContext,
+    SemanticPrefetchPolicy,
+)
 from l3store.policies.registry import (
-    register_eviction_policy,
     get_eviction_policy,
     list_eviction_policies,
+    register_eviction_policy,
 )
 
 __all__ = [
-    "EvictionPolicy",
     "EvictionDecision",
-    "register_eviction_policy",
+    "EvictionPolicy",
+    "PrefetchDecision",
+    "PrefetchPolicy",
+    "RequestContext",
+    "SemanticPrefetchPolicy",
     "get_eviction_policy",
     "list_eviction_policies",
+    "register_eviction_policy",
 ]
