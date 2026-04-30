@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from typing import Optional
 
 import numpy as np
@@ -210,6 +211,47 @@ class UnifiedObjectStore:
 
     def list_semantic_entries(self) -> list[str]:
         return self._list_ids(self._config.objects.semantic_cache.key_prefix)
+
+    # ── Prefetch ─────────────────────────────────────────
+
+    def prefetch_batch(self, decisions: Iterable[object]) -> dict[str, object]:
+        """
+        Load objects described by prefetch decisions from L3.
+
+        Results are keyed by object_id. Missing objects and unknown prefetch
+        types are skipped so callers can safely pass speculative decisions.
+        """
+        results: dict[str, object] = {}
+        seen: set[str] = set()
+
+        for decision in decisions:
+            object_id = getattr(decision, "object_id", None)
+            prefetch_type = getattr(decision, "prefetch_type", None)
+            if not object_id or object_id in seen:
+                continue
+            seen.add(object_id)
+
+            result = self._prefetch_one(object_id, prefetch_type)
+            if result is not None:
+                results[object_id] = result
+
+        logger.info("Prefetched %d/%d requested objects", len(results), len(seen))
+        return results
+
+    def _prefetch_one(self, object_id: str, prefetch_type: str | None) -> object | None:
+        if prefetch_type == "kv_cache":
+            return self.get_kv_block(object_id)
+        if prefetch_type == "rag":
+            return self.get_rag_object(object_id)
+        if prefetch_type == "semantic":
+            return self.get_semantic_entry(object_id)
+
+        logger.debug(
+            "Skipping unknown prefetch type %r for object %s",
+            prefetch_type,
+            object_id,
+        )
+        return None
 
     # ── Stats ────────────────────────────────────────────
 
