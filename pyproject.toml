@@ -33,6 +33,9 @@ dev = [
 ]
 all = ["l3-llm-store[embeddings,grpc,dev]"]
 
+[project.scripts]
+l3-store = "l3store.server:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/l3store"]
 

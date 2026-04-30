@@ -186,6 +186,7 @@ def serve(
     host: str = "[::]",
     port: int = 50051,
     max_workers: int = 10,
+    wait: bool = True,
 ) -> grpc.Server:
     store = build_store(config)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
@@ -197,4 +198,6 @@ def serve(
     server.add_insecure_port(address)
     server.start()
     logger.info("L3 gRPC server listening on %s", address)
+    if wait:
+        server.wait_for_termination()
     return server
