@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Any, Optional
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ObjectType(str, Enum):
@@ -112,6 +112,12 @@ class AgentStep(BaseModel):
     timestamp_start: float = Field(default_factory=time.time)
     timestamp_end: Optional[float] = None
 
+    @model_validator(mode="after")
+    def _validate_timestamps(self) -> AgentStep:
+        if self.timestamp_end is not None and self.timestamp_end < self.timestamp_start:
+            raise ValueError("timestamp_end must be >= timestamp_start")
+        return self
+
 
 class ToolCallArtifact(BaseModel):
     meta: ObjectMeta = Field(
@@ -131,6 +137,23 @@ class ToolCallArtifact(BaseModel):
     created_at: float = Field(default_factory=time.time)
     expires_at: float
 
+    @field_validator("ttl")
+    @classmethod
+    def _validate_ttl(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("ttl must be positive")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_expiration(self) -> ToolCallArtifact:
+        if self.expires_at <= self.created_at:
+            raise ValueError("expires_at must be greater than created_at")
+        return self
+
+    def is_expired(self, now: float | None = None) -> bool:
+        current_time = time.time() if now is None else now
+        return current_time >= self.expires_at
+
 
 class PlanCacheEntry(BaseModel):
     meta: ObjectMeta = Field(
@@ -146,6 +169,13 @@ class PlanCacheEntry(BaseModel):
     last_validated_at: Optional[float] = None
     validity_scope: ArtifactScope = ArtifactScope.SESSION
 
+    @field_validator("task_embedding_dim", "success_count", "failure_count")
+    @classmethod
+    def _validate_non_negative_int(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("value must be non-negative")
+        return value
+
 
 class WorkflowTrace(BaseModel):
     meta: ObjectMeta = Field(
@@ -158,6 +188,20 @@ class WorkflowTrace(BaseModel):
     shared_prefix_ratio: float = 0.0
     branching_factor: float = 1.0
     cache_events: list[dict[str, Any]] = Field(default_factory=list)
+
+    @field_validator("shared_prefix_ratio")
+    @classmethod
+    def _validate_shared_prefix_ratio(cls, value: float) -> float:
+        if not 0.0 <= value <= 1.0:
+            raise ValueError("shared_prefix_ratio must be in [0.0, 1.0]")
+        return value
+
+    @field_validator("branching_factor")
+    @classmethod
+    def _validate_branching_factor(cls, value: float) -> float:
+        if value < 1.0:
+            raise ValueError("branching_factor must be >= 1.0")
+        return value
 
 
 class KVCacheBlock(BaseModel):
