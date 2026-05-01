@@ -11,7 +11,9 @@ def make_block(
     *,
     agent_id: str | None = None,
     expected_next_use_step: int | None = None,
+    reuse_score: float = 0.0,
     size_bytes: int = 0,
+    reload_cost_ms: float | None = None,
     shared_by_sessions: list[str] | None = None,
 ) -> KVCacheBlock:
     block = KVCacheBlock(
@@ -21,7 +23,10 @@ def make_block(
     block.meta.object_id = object_id
     block.meta.agent_id = agent_id
     block.meta.expected_next_use_step = expected_next_use_step
+    block.meta.reuse_score = reuse_score
     block.meta.size_bytes = size_bytes
+    if reload_cost_ms is not None:
+        block.meta.tags["reload_cost_ms"] = str(reload_cost_ms)
     return block
 
 
@@ -99,14 +104,92 @@ def test_large_object_gets_size_penalty() -> None:
     assert policy.select_victim([small, large]).object_id == "large"
 
 
+def test_high_prefix_reuse_score_keeps_block_longer() -> None:
+    policy = WorkflowAwareEviction(
+        recency_weight=0.0,
+        frequency_weight=0.0,
+        shared_weight=0.0,
+        prefix_weight=1.0,
+        workflow_weight=0.0,
+        size_weight=0.0,
+        reload_weight=0.0,
+    )
+    reusable = make_block("reusable", reuse_score=0.9)
+    one_off = make_block("one_off", reuse_score=0.1)
+
+    assert policy.select_victim([reusable, one_off]).object_id == "one_off"
+
+
+def test_reload_cost_penalty_prefers_evicting_expensive_reload() -> None:
+    policy = WorkflowAwareEviction(
+        recency_weight=0.0,
+        frequency_weight=0.0,
+        shared_weight=0.0,
+        prefix_weight=0.0,
+        workflow_weight=0.0,
+        size_weight=0.0,
+        reload_weight=1.0,
+        reload_cost_normalizer_ms=1_000.0,
+    )
+    cheap = make_block("cheap", reload_cost_ms=100.0)
+    expensive = make_block("expensive", reload_cost_ms=900.0)
+
+    assert policy.select_victim([cheap, expensive]).object_id == "expensive"
+
+
+def test_reload_cost_can_use_predicted_tool_latency() -> None:
+    policy = WorkflowAwareEviction(
+        recency_weight=0.0,
+        frequency_weight=0.0,
+        shared_weight=0.0,
+        prefix_weight=0.0,
+        workflow_weight=0.0,
+        size_weight=0.0,
+        reload_weight=1.0,
+    )
+    block = make_block("block")
+    block.meta.predicted_tool_latency_ms = 500.0
+
+    assert policy.score_components(block)["reload_cost_penalty"] == 0.5
+
+
+def test_score_components_expose_all_formula_terms() -> None:
+    policy = WorkflowAwareEviction(
+        recency_weight=0.0,
+        frequency_weight=0.0,
+        shared_weight=0.0,
+        prefix_weight=1.0,
+        workflow_weight=0.0,
+        size_weight=1.0,
+        reload_weight=1.0,
+        size_normalizer_bytes=100,
+        reload_cost_normalizer_ms=100,
+    )
+    block = make_block(
+        "block",
+        reuse_score=2.0,
+        size_bytes=50,
+        reload_cost_ms=25.0,
+    )
+
+    components = policy.score_components(block)
+
+    assert components["prefix_reuse"] == 1.0
+    assert components["size_penalty"] == 0.5
+    assert components["reload_cost_penalty"] == 0.25
+    assert components["score"] == 0.25
+
+
 def test_degrades_to_frequency_when_graph_is_absent() -> None:
     policy = WorkflowAwareEviction(
         graph=None,
         recency_weight=0.0,
         frequency_weight=1.0,
         shared_weight=0.0,
+        prefix_weight=0.0,
         workflow_weight=1.0,
         size_weight=0.0,
+        reload_weight=0.0,
     )
     rare = make_block("rare", agent_id="agent")
     frequent = make_block("frequent", agent_id="agent")
@@ -138,6 +221,9 @@ def test_validates_configuration() -> None:
 
     with pytest.raises(ValueError, match="size_normalizer_bytes"):
         WorkflowAwareEviction(size_normalizer_bytes=0)
+
+    with pytest.raises(ValueError, match="reload_cost_normalizer_ms"):
+        WorkflowAwareEviction(reload_cost_normalizer_ms=0)
 
 
 def test_policy_is_registered() -> None:
