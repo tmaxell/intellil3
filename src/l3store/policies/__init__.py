@@ -12,6 +12,7 @@ from l3store.policies.registry import (
     list_eviction_policies,
     register_eviction_policy,
 )
+from l3store.policies.retention import AgentRetentionDecision, AgentTTLPolicy
 
 __all__ = [
     "EvictionDecision",
@@ -25,4 +26,6 @@ __all__ = [
     "get_eviction_policy",
     "list_eviction_policies",
     "register_eviction_policy",
+    "AgentRetentionDecision",
+    "AgentTTLPolicy",
 ]
