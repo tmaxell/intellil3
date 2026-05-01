@@ -5,6 +5,10 @@ from benchmarks.measurement.comparison import (
     render_comparison_csv,
     render_comparison_report,
 )
+from benchmarks.measurement.run_all_comparisons import (
+    render_comparison_index_csv,
+    render_comparison_index_markdown,
+)
 from benchmarks.measurement.run_comparison import _parse_targets
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
@@ -104,6 +108,21 @@ def test_parse_targets() -> None:
         "latency_p95_ms": 35.0,
         "throughput_req_s": 60.0,
     }
+
+
+def test_render_comparison_index() -> None:
+    comparison = compare_systems(
+        _summary(),
+        baseline_system="baseline",
+        candidate_system="candidate",
+    )
+
+    markdown = render_comparison_index_markdown([comparison])
+    csv_text = render_comparison_index_csv([comparison])
+
+    assert "Benchmark Comparison Index" in markdown
+    assert "comparison test" in csv_text
+    assert "latency_p95_ms" in csv_text
 
 
 def _summary() -> MeasurementSummary:
