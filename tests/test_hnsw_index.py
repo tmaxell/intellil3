@@ -51,6 +51,18 @@ class TestHNSWIndex:
         assert [object_id for object_id, _ in results] == ["second"]
         assert index.remove("missing") is False
 
+    def test_removed_slots_are_reused(self):
+        index = HNSWIndex(dim=3, max_elements=2)
+        index.add("first", unit([1.0, 0.0, 0.0]))
+        index.add("second", unit([0.0, 1.0, 0.0]))
+
+        assert index.remove("first") is True
+        index.add("third", unit([0.0, 0.0, 1.0]))
+
+        results = index.search(unit([0.0, 0.0, 1.0]), k=2, threshold=0.0)
+        assert [object_id for object_id, _ in results][0] == "third"
+        assert len(index) == 2
+
     def test_rejects_wrong_embedding_shape(self):
         index = HNSWIndex(dim=3, max_elements=10)
 
