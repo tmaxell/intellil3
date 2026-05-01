@@ -69,6 +69,38 @@ class ObjectMeta(BaseModel):
         return self
 
 
+class AgentWorkflow(BaseModel):
+    meta: ObjectMeta = Field(
+        default_factory=lambda: ObjectMeta(object_type=ObjectType.AGENT_WORKFLOW)
+    )
+    workflow_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    session_id: str = ""
+    workflow_type: AgentWorkflowType = AgentWorkflowType.REACT
+    created_at: float = Field(default_factory=time.time)
+    status: AgentWorkflowStatus = AgentWorkflowStatus.CREATED
+    agent_ids: list[str] = Field(default_factory=list)
+    step_ids: list[str] = Field(default_factory=list)
+
+
+class AgentStep(BaseModel):
+    meta: ObjectMeta = Field(
+        default_factory=lambda: ObjectMeta(object_type=ObjectType.AGENT_STEP)
+    )
+    step_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    workflow_id: str
+    agent_id: str
+    turn_id: int = 0
+    parent_step_id: Optional[str] = None
+    input_prompt_hash: str = ""
+    output_hash: str = ""
+    tool_call_id: Optional[str] = None
+    kv_block_ids: list[str] = Field(default_factory=list)
+    rag_object_ids: list[str] = Field(default_factory=list)
+    semantic_entry_ids: list[str] = Field(default_factory=list)
+    timestamp_start: float = Field(default_factory=time.time)
+    timestamp_end: Optional[float] = None
+
+
 class KVCacheBlock(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

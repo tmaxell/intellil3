@@ -1,4 +1,6 @@
 from l3store.core.types import (
+    AgentStep,
+    AgentWorkflow,
     AgentWorkflowStatus,
     AgentWorkflowType,
     ArtifactScope,
@@ -39,6 +41,39 @@ def test_agentic_meta_type_roundtrip() -> None:
 
     assert restored.object_type == ObjectType.AGENT_WORKFLOW
     assert restored.object_id == meta.object_id
+
+
+def test_agent_workflow_defaults_and_roundtrip() -> None:
+    workflow = AgentWorkflow(
+        session_id="session_a",
+        workflow_type=AgentWorkflowType.TOOL_AGENT,
+        agent_ids=["planner", "executor"],
+    )
+    restored = AgentWorkflow.model_validate_json(workflow.model_dump_json())
+
+    assert restored.meta.object_type == ObjectType.AGENT_WORKFLOW
+    assert restored.workflow_id == workflow.workflow_id
+    assert restored.status == AgentWorkflowStatus.CREATED
+    assert restored.agent_ids == ["planner", "executor"]
+
+
+def test_agent_step_links_workflow_artifacts() -> None:
+    step = AgentStep(
+        workflow_id="workflow_1",
+        agent_id="agent_a",
+        turn_id=2,
+        parent_step_id="step_parent",
+        tool_call_id="tool_1",
+        kv_block_ids=["kv_1", "kv_2"],
+        rag_object_ids=["rag_1"],
+        semantic_entry_ids=["sem_1"],
+    )
+
+    assert step.meta.object_type == ObjectType.AGENT_STEP
+    assert step.workflow_id == "workflow_1"
+    assert step.parent_step_id == "step_parent"
+    assert step.kv_block_ids == ["kv_1", "kv_2"]
+    assert step.timestamp_end is None
 
 
 def test_existing_kv_block_still_defaults_to_kv_cache() -> None:
