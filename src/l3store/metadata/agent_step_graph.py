@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from l3store.core.types import AgentStep, AgentWorkflow
+
 
 @dataclass
 class AgentStepNode:
@@ -13,6 +15,7 @@ class AgentStepNode:
     parent_step_id: str | None = None
     completed: bool = False
     child_step_ids: list[str] = field(default_factory=list)
+    turn_id: int = 0
 
 
 class AgentStepGraph:
@@ -30,12 +33,16 @@ class AgentStepGraph:
     def add_workflow(self, workflow_id: str) -> None:
         self._workflow_steps.setdefault(workflow_id, [])
 
+    def add_workflow_object(self, workflow: AgentWorkflow) -> None:
+        self.add_workflow(workflow.workflow_id)
+
     def add_step(
         self,
         workflow_id: str,
         step_id: str,
         agent_id: str,
         parent_step_id: str | None = None,
+        turn_id: int = 0,
     ) -> None:
         if step_id in self._steps:
             raise ValueError(f"step already exists: {step_id}")
@@ -53,6 +60,7 @@ class AgentStepGraph:
             step_id=step_id,
             agent_id=agent_id,
             parent_step_id=parent_step_id,
+            turn_id=turn_id,
         )
         self._steps[step_id] = node
         self._workflow_steps[workflow_id].append(step_id)
@@ -60,6 +68,17 @@ class AgentStepGraph:
 
         if parent_step_id is not None:
             self._steps[parent_step_id].child_step_ids.append(step_id)
+
+    def add_step_object(self, step: AgentStep) -> None:
+        self.add_step(
+            workflow_id=step.workflow_id,
+            step_id=step.step_id,
+            agent_id=step.agent_id,
+            parent_step_id=step.parent_step_id,
+            turn_id=step.turn_id,
+        )
+        if step.timestamp_end is not None:
+            self.mark_step_completed(step.step_id)
 
     def mark_step_completed(self, step_id: str) -> None:
         self._require_step(step_id).completed = True
@@ -105,11 +124,30 @@ class AgentStepGraph:
     def workflow_steps(self, workflow_id: str) -> list[str]:
         return list(self._workflow_steps.get(workflow_id, []))
 
+    def agent_steps(self, agent_id: str) -> list[str]:
+        return list(self._agent_steps.get(agent_id, []))
+
     def get_step(self, step_id: str) -> AgentStepNode | None:
         return self._steps.get(step_id)
 
+    def has_workflow(self, workflow_id: str) -> bool:
+        return workflow_id in self._workflow_steps
+
+    def stats(self) -> dict[str, int]:
+        completed = sum(1 for step in self._steps.values() if step.completed)
+        return {
+            "workflows": len(self._workflow_steps),
+            "steps": len(self._steps),
+            "agents": len(self._agent_steps),
+            "completed_steps": completed,
+            "pending_steps": len(self._steps) - completed,
+        }
+
     def __len__(self) -> int:
         return len(self._steps)
+
+    def __contains__(self, step_id: str) -> bool:
+        return step_id in self._steps
 
     def _future_uncompleted_steps(
         self,
