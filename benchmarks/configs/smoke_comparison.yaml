@@ -1,0 +1,18 @@
+experiment:
+  name: "Smoke Baseline vs L3 Comparison"
+  description: "Small deterministic comparison of direct baseline and L3 system model"
+
+workload:
+  type: "multi_user_chat"
+  num_users: 3
+  requests_per_user: 4
+  shared_system_prompt: "You are a helpful assistant."
+  seed: 11
+
+systems:
+  - name: "baseline_no_system"
+  - name: "l3_measurement_system"
+
+output:
+  results_path: "benchmarks/results/smoke_comparison/results.json"
+  report_path: "benchmarks/results/smoke_comparison/report.md"

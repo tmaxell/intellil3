@@ -4,10 +4,11 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 
+from benchmarks.baselines.base import BenchmarkSystem
 from benchmarks.measurement.environment import collect_environment
 from benchmarks.runners.benchmark_runner import BenchmarkRunner, NoOpSystem
 
@@ -39,14 +40,20 @@ class MeasurementSuite:
         output_dir: str | Path,
         repetitions: int = 5,
         noop: bool = False,
+        systems: list[BenchmarkSystem] | None = None,
+        system_factory: Callable[[], list[BenchmarkSystem]] | None = None,
     ):
         if repetitions <= 0:
             raise ValueError("repetitions must be positive")
+        if systems is not None and system_factory is not None:
+            raise ValueError("systems and system_factory are mutually exclusive")
 
         self.config_path = Path(config_path)
         self.output_dir = Path(output_dir)
         self.repetitions = repetitions
         self.noop = noop
+        self.systems = systems
+        self.system_factory = system_factory
 
     def run(self) -> MeasurementSummary:
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -55,7 +62,7 @@ class MeasurementSuite:
         for repetition in range(self.repetitions):
             runner = BenchmarkRunner.from_yaml(
                 self.config_path,
-                systems=[NoOpSystem()] if self.noop else [],
+                systems=self._build_systems(),
             )
             results = [result.as_dict() for result in runner.run()]
             raw_runs.append(
@@ -118,6 +125,13 @@ class MeasurementSuite:
             encoding="utf-8",
         )
         report_path.write_text(render_measurement_report(summary), encoding="utf-8")
+
+    def _build_systems(self) -> list[BenchmarkSystem]:
+        if self.system_factory is not None:
+            return self.system_factory()
+        if self.systems is not None:
+            return self.systems
+        return [NoOpSystem()] if self.noop else []
 
 
 def render_measurement_report(summary: MeasurementSummary) -> str:
