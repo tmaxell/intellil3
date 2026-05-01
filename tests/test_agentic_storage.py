@@ -1,5 +1,6 @@
 import numpy as np
 
+from l3store.core import AgentWorkflow as ExportedAgentWorkflow
 from l3store.core.types import (
     AgentStep,
     AgentWorkflow,
@@ -9,6 +10,18 @@ from l3store.core.types import (
     ToolCallArtifact,
     WorkflowTrace,
 )
+
+
+def test_agentic_types_are_exported_from_core_package() -> None:
+    assert ExportedAgentWorkflow is AgentWorkflow
+
+
+def test_missing_agentic_objects_return_none(store) -> None:
+    assert store.get_agent_workflow("missing_workflow") is None
+    assert store.get_agent_step("missing_step") is None
+    assert store.get_tool_artifact("missing_tool") is None
+    assert store.get_plan_cache_entry("missing_plan") is None
+    assert store.get_workflow_trace("missing_trace") is None
 
 
 def test_agent_workflow_put_get_list_delete(store) -> None:
@@ -162,3 +175,13 @@ def test_agentic_stats_include_counts(store) -> None:
     assert stats["tool_artifacts"] == 1
     assert stats["plan_cache_entries"] == 1
     assert stats["workflow_traces"] == 1
+
+
+def test_empty_agentic_stats_are_zero(store) -> None:
+    stats = store.stats()
+
+    assert stats["agent_workflows"] == 0
+    assert stats["agent_steps"] == 0
+    assert stats["tool_artifacts"] == 0
+    assert stats["plan_cache_entries"] == 0
+    assert stats["workflow_traces"] == 0
