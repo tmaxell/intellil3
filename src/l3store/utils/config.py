@@ -28,10 +28,19 @@ class SemanticCacheConfig(BaseModel):
     key_prefix: str = "sem/"
 
 
+class AgentObjectsConfig(BaseModel):
+    workflows_prefix: str = "agent/workflows/"
+    steps_prefix: str = "agent/steps/"
+    tools_prefix: str = "agent/tools/"
+    plans_prefix: str = "agent/plans/"
+    traces_prefix: str = "agent/traces/"
+
+
 class ObjectsConfig(BaseModel):
     kv_cache: KVCacheConfig = Field(default_factory=KVCacheConfig)
     rag: RAGConfig = Field(default_factory=RAGConfig)
     semantic_cache: SemanticCacheConfig = Field(default_factory=SemanticCacheConfig)
+    agent: AgentObjectsConfig = Field(default_factory=AgentObjectsConfig)
 
 
 class L3Config(BaseModel):

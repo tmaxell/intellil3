@@ -1,18 +1,28 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable
-from typing import Optional
+from collections.abc import Callable, Iterable
+from typing import Optional, TypeVar
 
 import numpy as np
 
-from l3store.core.types import KVCacheBlock, ObjectType, RAGObject, SemanticCacheEntry
+from l3store.core.types import (
+    AgentStep,
+    AgentWorkflow,
+    KVCacheBlock,
+    ObjectType,
+    RAGObject,
+    SemanticCacheEntry,
+    ToolCallArtifact,
+    WorkflowTrace,
+)
 from l3store.metadata.metadata_store import MetadataStore
 from l3store.storage.backend import StorageBackend
 from l3store.storage.serialization import Serializer
 from l3store.utils.config import L3Config
 
 logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class UnifiedObjectStore:
@@ -52,6 +62,46 @@ class UnifiedObjectStore:
     def _delete_pair(self, prefix: str, object_id: str, data_ext: str) -> bool:
         keys = [f"{prefix}{object_id}.meta.json", f"{prefix}{object_id}.{data_ext}"]
         return self._backend.delete_many(keys) > 0
+
+    def _put_meta_object(
+        self,
+        prefix: str,
+        object_id: str,
+        meta_bytes: bytes,
+        object_type: ObjectType,
+    ) -> str:
+        self._backend.put(f"{prefix}{object_id}.meta.json", meta_bytes)
+        self._metadata.on_object_added(object_type, object_id)
+        return object_id
+
+    def _get_meta_object(
+        self,
+        prefix: str,
+        object_id: str,
+        deserialize: Callable[[bytes], T],
+    ) -> T | None:
+        if not self._metadata.might_exist(object_id):
+            return None
+
+        meta_data = self._backend.get(f"{prefix}{object_id}.meta.json")
+        if meta_data is None:
+            return None
+        obj = deserialize(meta_data)
+        meta = getattr(obj, "meta", None)
+        if meta is not None:
+            meta.touch()
+        return obj
+
+    def _delete_meta_object(
+        self,
+        prefix: str,
+        object_id: str,
+        object_type: ObjectType,
+    ) -> bool:
+        result = self._backend.delete(f"{prefix}{object_id}.meta.json")
+        if result:
+            self._metadata.on_object_removed(object_type, object_id)
+        return result
 
     def _list_ids(self, prefix: str) -> list[str]:
         keys = self._backend.list_keys(prefix)
@@ -212,6 +262,120 @@ class UnifiedObjectStore:
     def list_semantic_entries(self) -> list[str]:
         return self._list_ids(self._config.objects.semantic_cache.key_prefix)
 
+    # ── Agentic Workflow Metadata ────────────────────────
+
+    def put_agent_workflow(self, workflow: AgentWorkflow) -> str:
+        prefix = self._config.objects.agent.workflows_prefix
+        workflow.meta.object_id = workflow.workflow_id
+        return self._put_meta_object(
+            prefix,
+            workflow.workflow_id,
+            Serializer.serialize_agent_workflow(workflow),
+            ObjectType.AGENT_WORKFLOW,
+        )
+
+    def get_agent_workflow(self, workflow_id: str) -> AgentWorkflow | None:
+        return self._get_meta_object(
+            self._config.objects.agent.workflows_prefix,
+            workflow_id,
+            Serializer.deserialize_agent_workflow,
+        )
+
+    def delete_agent_workflow(self, workflow_id: str) -> bool:
+        return self._delete_meta_object(
+            self._config.objects.agent.workflows_prefix,
+            workflow_id,
+            ObjectType.AGENT_WORKFLOW,
+        )
+
+    def list_agent_workflows(self) -> list[str]:
+        return self._list_ids(self._config.objects.agent.workflows_prefix)
+
+    def put_agent_step(self, step: AgentStep) -> str:
+        prefix = self._config.objects.agent.steps_prefix
+        step.meta.object_id = step.step_id
+        return self._put_meta_object(
+            prefix,
+            step.step_id,
+            Serializer.serialize_agent_step(step),
+            ObjectType.AGENT_STEP,
+        )
+
+    def get_agent_step(self, step_id: str) -> AgentStep | None:
+        return self._get_meta_object(
+            self._config.objects.agent.steps_prefix,
+            step_id,
+            Serializer.deserialize_agent_step,
+        )
+
+    def delete_agent_step(self, step_id: str) -> bool:
+        return self._delete_meta_object(
+            self._config.objects.agent.steps_prefix,
+            step_id,
+            ObjectType.AGENT_STEP,
+        )
+
+    def list_agent_steps(self) -> list[str]:
+        return self._list_ids(self._config.objects.agent.steps_prefix)
+
+    def put_tool_artifact(self, artifact: ToolCallArtifact) -> str:
+        prefix = self._config.objects.agent.tools_prefix
+        artifact.meta.object_id = artifact.tool_call_id
+        artifact.meta.tool_name = artifact.tool_name
+        artifact.meta.tool_args_hash = artifact.tool_args_hash
+        artifact.meta.valid_until = artifact.expires_at
+        artifact.meta.scope = artifact.permission_scope
+        return self._put_meta_object(
+            prefix,
+            artifact.tool_call_id,
+            Serializer.serialize_tool_artifact(artifact),
+            ObjectType.TOOL_CALL_ARTIFACT,
+        )
+
+    def get_tool_artifact(self, tool_call_id: str) -> ToolCallArtifact | None:
+        return self._get_meta_object(
+            self._config.objects.agent.tools_prefix,
+            tool_call_id,
+            Serializer.deserialize_tool_artifact,
+        )
+
+    def delete_tool_artifact(self, tool_call_id: str) -> bool:
+        return self._delete_meta_object(
+            self._config.objects.agent.tools_prefix,
+            tool_call_id,
+            ObjectType.TOOL_CALL_ARTIFACT,
+        )
+
+    def list_tool_artifacts(self) -> list[str]:
+        return self._list_ids(self._config.objects.agent.tools_prefix)
+
+    def put_workflow_trace(self, trace: WorkflowTrace) -> str:
+        prefix = self._config.objects.agent.traces_prefix
+        trace.meta.object_id = trace.workflow_id
+        return self._put_meta_object(
+            prefix,
+            trace.workflow_id,
+            Serializer.serialize_workflow_trace(trace),
+            ObjectType.WORKFLOW_TRACE,
+        )
+
+    def get_workflow_trace(self, workflow_id: str) -> WorkflowTrace | None:
+        return self._get_meta_object(
+            self._config.objects.agent.traces_prefix,
+            workflow_id,
+            Serializer.deserialize_workflow_trace,
+        )
+
+    def delete_workflow_trace(self, workflow_id: str) -> bool:
+        return self._delete_meta_object(
+            self._config.objects.agent.traces_prefix,
+            workflow_id,
+            ObjectType.WORKFLOW_TRACE,
+        )
+
+    def list_workflow_traces(self) -> list[str]:
+        return self._list_ids(self._config.objects.agent.traces_prefix)
+
     # ── Prefetch ─────────────────────────────────────────
 
     def prefetch_batch(self, decisions: Iterable[object]) -> dict[str, object]:
@@ -260,5 +424,9 @@ class UnifiedObjectStore:
             "kv_cache_blocks": len(self.list_kv_blocks()),
             "rag_objects": len(self.list_rag_objects()),
             "semantic_cache_entries": len(self.list_semantic_entries()),
+            "agent_workflows": len(self.list_agent_workflows()),
+            "agent_steps": len(self.list_agent_steps()),
+            "tool_artifacts": len(self.list_tool_artifacts()),
+            "workflow_traces": len(self.list_workflow_traces()),
             "metadata": self._metadata.stats(),
         }
