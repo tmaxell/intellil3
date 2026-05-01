@@ -1,4 +1,5 @@
 from l3store.policies.base import EvictionDecision, EvictionPolicy
+from l3store.policies.eviction import WorkflowAwareEviction
 from l3store.policies.prefetch import (
     AdaptivePrefetchPolicy,
     PrefetchDecision,
@@ -17,6 +18,7 @@ from l3store.policies.retention import AgentRetentionDecision, AgentTTLPolicy
 __all__ = [
     "EvictionDecision",
     "EvictionPolicy",
+    "WorkflowAwareEviction",
     "AdaptivePrefetchPolicy",
     "PrefetchDecision",
     "PrefetchPolicy",
