@@ -18,6 +18,13 @@ class StorageBackend(ABC):
     def delete(self, key: str) -> bool:
         ...
 
+    def delete_many(self, keys: list[str]) -> int:
+        count = 0
+        for key in keys:
+            if self.delete(key):
+                count += 1
+        return count
+
     @abstractmethod
     def exists(self, key: str) -> bool:
         ...

@@ -27,9 +27,10 @@ class ObjectMeta(BaseModel):
     ref_count: int = 0
     tags: dict[str, str] = Field(default_factory=dict)
 
-    def touch(self) -> None:
+    def touch(self) -> ObjectMeta:
         self.last_accessed = time.time()
         self.access_count += 1
+        return self
 
 
 class KVCacheBlock(BaseModel):

@@ -1,0 +1,18 @@
+experiment:
+  name: "Multi User Chat"
+  description: "Concurrent sessions sharing system prompts"
+
+workload:
+  type: "multi_user_chat"
+  num_users: 50
+  requests_per_user: 10
+  shared_system_prompt: "You are a helpful assistant."
+  seed: 42
+
+systems:
+  - name: "baseline_lru_l3"
+  - name: "l3_full"
+
+output:
+  results_path: "benchmarks/results/exp03/results.json"
+  report_path: "benchmarks/results/exp03/report.md"

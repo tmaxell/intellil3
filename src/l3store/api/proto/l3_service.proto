@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+package l3store.v1;
+
+import "l3store/api/proto/objects.proto";
+
+service L3Service {
+  rpc PutKVBlock(PutKVBlockRequest) returns (PutKVBlockResponse);
+  rpc GetKVBlock(GetKVBlockRequest) returns (GetKVBlockResponse);
+  rpc DeleteKVBlock(DeleteKVBlockRequest) returns (DeleteKVBlockResponse);
+  rpc ListKVBlocks(ListKVBlocksRequest) returns (ListKVBlocksResponse);
+
+  rpc PutRAGObject(PutRAGObjectRequest) returns (PutRAGObjectResponse);
+  rpc GetRAGObject(GetRAGObjectRequest) returns (GetRAGObjectResponse);
+
+  rpc PutSemanticEntry(PutSemanticEntryRequest) returns (PutSemanticEntryResponse);
+  rpc GetSemanticEntry(GetSemanticEntryRequest) returns (GetSemanticEntryResponse);
+  rpc SearchSimilarPrompts(SearchSimilarPromptsRequest)
+      returns (SearchSimilarPromptsResponse);
+
+  rpc PrefetchBatch(PrefetchBatchRequest) returns (PrefetchBatchResponse);
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+}
+
+message PutKVBlockRequest {
+  KVCacheBlockProto block = 1;
+  bytes key_states = 2;
+  bytes value_states = 3;
+}
+
+message PutKVBlockResponse {
+  string object_id = 1;
+}
+
+message GetKVBlockRequest {
+  string object_id = 1;
+}
+
+message GetKVBlockResponse {
+  KVCacheBlockProto block = 1;
+  bytes key_states = 2;
+  bytes value_states = 3;
+  bool found = 4;
+}
+
+message DeleteKVBlockRequest {
+  string object_id = 1;
+}
+
+message DeleteKVBlockResponse {
+  bool deleted = 1;
+}
+
+message ListKVBlocksRequest {}
+
+message ListKVBlocksResponse {
+  repeated string object_ids = 1;
+}
+
+message PutRAGObjectRequest {
+  RAGObjectProto object = 1;
+  bytes embedding = 2;
+}
+
+message PutRAGObjectResponse {
+  string object_id = 1;
+}
+
+message GetRAGObjectRequest {
+  string object_id = 1;
+}
+
+message GetRAGObjectResponse {
+  RAGObjectProto object = 1;
+  bytes embedding = 2;
+  bool found = 3;
+}
+
+message PutSemanticEntryRequest {
+  SemanticCacheEntryProto entry = 1;
+  bytes prompt_embedding = 2;
+}
+
+message PutSemanticEntryResponse {
+  string object_id = 1;
+}
+
+message GetSemanticEntryRequest {
+  string object_id = 1;
+}
+
+message GetSemanticEntryResponse {
+  SemanticCacheEntryProto entry = 1;
+  bytes prompt_embedding = 2;
+  bool found = 3;
+}
+
+message SearchSimilarPromptsRequest {
+  bytes query_embedding = 1;
+  int32 top_k = 2;
+  double threshold = 3;
+}
+
+message SearchSimilarPromptsResponse {
+  repeated SimilarPromptProto matches = 1;
+}
+
+message PrefetchBatchRequest {
+  repeated PrefetchDecisionProto decisions = 1;
+}
+
+message PrefetchObjectProto {
+  string object_id = 1;
+  string prefetch_type = 2;
+  oneof payload {
+    GetKVBlockResponse kv_cache = 3;
+    GetRAGObjectResponse rag = 4;
+    GetSemanticEntryResponse semantic = 5;
+  }
+}
+
+message PrefetchBatchResponse {
+  repeated PrefetchObjectProto objects = 1;
+}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+  string stats_json = 1;
+}

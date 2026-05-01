@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "intellil3"
+name = "l3-llm-store"
 version = "0.1.0"
 description = "L3 object storage layer for LLM serving"
 requires-python = ">=3.10"
@@ -15,12 +15,26 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+embeddings = [
+    "hnswlib>=0.8",
+    "sentence-transformers>=2.2",
+    "torch>=2.0",
+]
+grpc = [
+    "grpcio>=1.62",
+    "grpcio-tools>=1.62",
+    "protobuf>=6.31",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "moto[s3]>=5.0",
     "ruff>=0.4",
 ]
+all = ["l3-llm-store[embeddings,grpc,dev]"]
+
+[project.scripts]
+l3-store = "l3store.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/l3store"]

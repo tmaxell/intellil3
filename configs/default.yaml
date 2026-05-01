@@ -1,0 +1,16 @@
+storage:
+  backend: s3
+  endpoint_url: "http://localhost:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "l3-llm-store"
+  region: "us-east-1"
+
+objects:
+  kv_cache:
+    block_size: 16
+    key_prefix: "kv/"
+  rag:
+    key_prefix: "rag/"
+  semantic_cache:
+    key_prefix: "sem/"

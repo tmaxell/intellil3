@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/
+.pytest_cache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Benchmark results (большие файлы)
+benchmarks/results/*/raw/
+benchmarks/results/*/*.npy
+benchmarks/results/*/*.npz
+
+# MinIO data
+minio_data/
+
+# OS
+.DS_Store
+Thumbs.db
