@@ -13,6 +13,7 @@ build/
 *.swp
 
 # Benchmark results (большие файлы)
+benchmarks/results/
 benchmarks/results/*/raw/
 benchmarks/results/*/*.npy
 benchmarks/results/*/*.npz

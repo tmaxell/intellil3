@@ -7,7 +7,7 @@ from enum import Enum
 from typing import Optional
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ObjectType(str, Enum):
@@ -34,6 +34,8 @@ class ObjectMeta(BaseModel):
 
 
 class KVCacheBlock(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     meta: ObjectMeta = Field(
         default_factory=lambda: ObjectMeta(object_type=ObjectType.KV_CACHE)
     )
@@ -43,9 +45,6 @@ class KVCacheBlock(BaseModel):
     token_hash: str = ""
     parent_block_id: Optional[str] = None
     shared_by_sessions: list[str] = Field(default_factory=list)
-
-    class Config:
-        arbitrary_types_allowed = True
 
     @staticmethod
     def compute_token_hash(token_ids: list[int]) -> str:
