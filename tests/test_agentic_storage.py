@@ -1,0 +1,187 @@
+import numpy as np
+
+from l3store.core import AgentWorkflow as ExportedAgentWorkflow
+from l3store.core.types import (
+    AgentStep,
+    AgentWorkflow,
+    AgentWorkflowType,
+    ArtifactScope,
+    PlanCacheEntry,
+    ToolCallArtifact,
+    WorkflowTrace,
+)
+
+
+def test_agentic_types_are_exported_from_core_package() -> None:
+    assert ExportedAgentWorkflow is AgentWorkflow
+
+
+def test_missing_agentic_objects_return_none(store) -> None:
+    assert store.get_agent_workflow("missing_workflow") is None
+    assert store.get_agent_step("missing_step") is None
+    assert store.get_tool_artifact("missing_tool") is None
+    assert store.get_plan_cache_entry("missing_plan") is None
+    assert store.get_workflow_trace("missing_trace") is None
+
+
+def test_agent_workflow_put_get_list_delete(store) -> None:
+    workflow = AgentWorkflow(
+        workflow_id="workflow_1",
+        session_id="session_a",
+        workflow_type=AgentWorkflowType.REACT,
+        agent_ids=["agent_a"],
+        step_ids=["step_1"],
+    )
+
+    workflow_id = store.put_agent_workflow(workflow)
+    loaded = store.get_agent_workflow(workflow_id)
+
+    assert loaded is not None
+    assert loaded.workflow_id == "workflow_1"
+    assert loaded.meta.object_id == "workflow_1"
+    assert loaded.agent_ids == ["agent_a"]
+    assert store.list_agent_workflows() == ["workflow_1"]
+    assert store.delete_agent_workflow(workflow_id) is True
+    assert store.get_agent_workflow(workflow_id) is None
+
+
+def test_agent_step_put_get_list_delete(store) -> None:
+    step = AgentStep(
+        step_id="step_1",
+        workflow_id="workflow_1",
+        agent_id="agent_a",
+        turn_id=1,
+        kv_block_ids=["kv_1"],
+        rag_object_ids=["rag_1"],
+        semantic_entry_ids=["sem_1"],
+    )
+
+    step_id = store.put_agent_step(step)
+    loaded = store.get_agent_step(step_id)
+
+    assert loaded is not None
+    assert loaded.step_id == "step_1"
+    assert loaded.meta.object_id == "step_1"
+    assert loaded.kv_block_ids == ["kv_1"]
+    assert store.list_agent_steps() == ["step_1"]
+    assert store.delete_agent_step(step_id) is True
+    assert store.get_agent_step(step_id) is None
+
+
+def test_tool_artifact_put_get_list_delete(store) -> None:
+    artifact = ToolCallArtifact(
+        tool_call_id="tool_1",
+        tool_name="search",
+        tool_args_hash="args_hash",
+        tool_output_payload={"answer": "42"},
+        ttl=60.0,
+        source_version="search-v1",
+        permission_scope=ArtifactScope.SESSION,
+        created_at=100.0,
+        expires_at=160.0,
+    )
+
+    tool_call_id = store.put_tool_artifact(artifact)
+    loaded = store.get_tool_artifact(tool_call_id)
+
+    assert loaded is not None
+    assert loaded.tool_call_id == "tool_1"
+    assert loaded.meta.object_id == "tool_1"
+    assert loaded.meta.tool_name == "search"
+    assert loaded.meta.tool_args_hash == "args_hash"
+    assert loaded.meta.valid_until == 160.0
+    assert loaded.meta.scope == ArtifactScope.SESSION
+    assert loaded.tool_output_payload == {"answer": "42"}
+    assert store.list_tool_artifacts() == ["tool_1"]
+    assert store.delete_tool_artifact(tool_call_id) is True
+    assert store.get_tool_artifact(tool_call_id) is None
+
+
+def test_plan_cache_entry_put_get_list_delete(store) -> None:
+    embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    entry = PlanCacheEntry(
+        plan_id="plan_1",
+        plan_template="1. Search\n2. Summarize",
+        required_tools=["search"],
+        constraints={"scope": "public"},
+        validity_scope=ArtifactScope.PUBLIC,
+    )
+
+    plan_id = store.put_plan_cache_entry(entry, embedding)
+    loaded = store.get_plan_cache_entry(plan_id)
+
+    assert loaded is not None
+    loaded_entry, loaded_embedding = loaded
+    assert loaded_entry.plan_id == "plan_1"
+    assert loaded_entry.meta.object_id == "plan_1"
+    assert loaded_entry.meta.plan_id == "plan_1"
+    assert loaded_entry.meta.scope == ArtifactScope.PUBLIC
+    assert loaded_entry.task_embedding_dim == 3
+    assert loaded_entry.meta.size_bytes == embedding.nbytes
+    np.testing.assert_array_equal(loaded_embedding, embedding)
+    assert store.list_plan_cache_entries() == ["plan_1"]
+    assert store.delete_plan_cache_entry(plan_id) is True
+    assert store.get_plan_cache_entry(plan_id) is None
+
+
+def test_workflow_trace_put_get_list_delete(store) -> None:
+    trace = WorkflowTrace(
+        workflow_id="workflow_1",
+        ordered_steps=["step_1", "step_2"],
+        tool_latencies={"tool_1": 25.0},
+        prompt_lengths={"step_1": 128},
+        shared_prefix_ratio=0.5,
+        branching_factor=1.5,
+        cache_events=[{"event": "hit", "object_id": "kv_1"}],
+    )
+
+    workflow_id = store.put_workflow_trace(trace)
+    loaded = store.get_workflow_trace(workflow_id)
+
+    assert loaded is not None
+    assert loaded.workflow_id == "workflow_1"
+    assert loaded.meta.object_id == "workflow_1"
+    assert loaded.ordered_steps == ["step_1", "step_2"]
+    assert store.list_workflow_traces() == ["workflow_1"]
+    assert store.delete_workflow_trace(workflow_id) is True
+    assert store.get_workflow_trace(workflow_id) is None
+
+
+def test_agentic_stats_include_counts(store) -> None:
+    store.put_agent_workflow(AgentWorkflow(workflow_id="workflow_1"))
+    store.put_agent_step(
+        AgentStep(step_id="step_1", workflow_id="workflow_1", agent_id="agent_a")
+    )
+    store.put_tool_artifact(
+        ToolCallArtifact(
+            tool_call_id="tool_1",
+            tool_name="search",
+            tool_args_hash="args_hash",
+            ttl=10.0,
+            created_at=1.0,
+            expires_at=11.0,
+        )
+    )
+    store.put_plan_cache_entry(
+        PlanCacheEntry(plan_id="plan_1"),
+        np.array([1.0, 0.0], dtype=np.float32),
+    )
+    store.put_workflow_trace(WorkflowTrace(workflow_id="workflow_1"))
+
+    stats = store.stats()
+
+    assert stats["agent_workflows"] == 1
+    assert stats["agent_steps"] == 1
+    assert stats["tool_artifacts"] == 1
+    assert stats["plan_cache_entries"] == 1
+    assert stats["workflow_traces"] == 1
+
+
+def test_empty_agentic_stats_are_zero(store) -> None:
+    stats = store.stats()
+
+    assert stats["agent_workflows"] == 0
+    assert stats["agent_steps"] == 0
+    assert stats["tool_artifacts"] == 0
+    assert stats["plan_cache_entries"] == 0
+    assert stats["workflow_traces"] == 0
