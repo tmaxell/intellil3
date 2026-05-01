@@ -4,7 +4,7 @@ import hashlib
 import time
 import uuid
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field
@@ -62,6 +62,18 @@ class ObjectMeta(BaseModel):
     reuse_score: float = 0.0
     ref_count: int = 0
     tags: dict[str, str] = Field(default_factory=dict)
+    workflow_id: Optional[str] = None
+    agent_id: Optional[str] = None
+    step_id: Optional[str] = None
+    turn_id: Optional[int] = None
+    tool_name: Optional[str] = None
+    tool_args_hash: Optional[str] = None
+    plan_id: Optional[str] = None
+    expected_next_use_step: Optional[int] = None
+    predicted_tool_latency_ms: Optional[float] = None
+    valid_until: Optional[float] = None
+    scope: Optional[ArtifactScope] = None
+    consistency_class: Optional[ConsistencyClass] = None
 
     def touch(self) -> ObjectMeta:
         self.last_accessed = time.time()
@@ -99,6 +111,53 @@ class AgentStep(BaseModel):
     semantic_entry_ids: list[str] = Field(default_factory=list)
     timestamp_start: float = Field(default_factory=time.time)
     timestamp_end: Optional[float] = None
+
+
+class ToolCallArtifact(BaseModel):
+    meta: ObjectMeta = Field(
+        default_factory=lambda: ObjectMeta(
+            object_type=ObjectType.TOOL_CALL_ARTIFACT,
+            consistency_class=ConsistencyClass.TTL,
+        )
+    )
+    tool_call_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    tool_name: str
+    tool_args_hash: str
+    tool_output_hash: str = ""
+    tool_output_payload: dict[str, Any] = Field(default_factory=dict)
+    ttl: float
+    source_version: str = ""
+    permission_scope: ArtifactScope = ArtifactScope.PRIVATE
+    created_at: float = Field(default_factory=time.time)
+    expires_at: float
+
+
+class PlanCacheEntry(BaseModel):
+    meta: ObjectMeta = Field(
+        default_factory=lambda: ObjectMeta(object_type=ObjectType.PLAN_CACHE)
+    )
+    plan_id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    task_embedding_dim: int = 0
+    plan_template: str = ""
+    required_tools: list[str] = Field(default_factory=list)
+    constraints: dict[str, str] = Field(default_factory=dict)
+    success_count: int = 0
+    failure_count: int = 0
+    last_validated_at: Optional[float] = None
+    validity_scope: ArtifactScope = ArtifactScope.SESSION
+
+
+class WorkflowTrace(BaseModel):
+    meta: ObjectMeta = Field(
+        default_factory=lambda: ObjectMeta(object_type=ObjectType.WORKFLOW_TRACE)
+    )
+    workflow_id: str
+    ordered_steps: list[str] = Field(default_factory=list)
+    tool_latencies: dict[str, float] = Field(default_factory=dict)
+    prompt_lengths: dict[str, int] = Field(default_factory=dict)
+    shared_prefix_ratio: float = 0.0
+    branching_factor: float = 1.0
+    cache_events: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class KVCacheBlock(BaseModel):
