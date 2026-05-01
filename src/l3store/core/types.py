@@ -14,6 +14,42 @@ class ObjectType(str, Enum):
     KV_CACHE = "kv_cache"
     RAG = "rag"
     SEMANTIC_CACHE = "semantic_cache"
+    AGENT_WORKFLOW = "agent_workflow"
+    AGENT_STEP = "agent_step"
+    TOOL_CALL_ARTIFACT = "tool_call_artifact"
+    PLAN_CACHE = "plan_cache"
+    WORKFLOW_TRACE = "workflow_trace"
+
+
+class AgentWorkflowType(str, Enum):
+    REACT = "react"
+    MULTI_AGENT = "multi_agent"
+    RAG_AGENT = "rag_agent"
+    TOOL_AGENT = "tool_agent"
+
+
+class AgentWorkflowStatus(str, Enum):
+    CREATED = "created"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class ArtifactScope(str, Enum):
+    PUBLIC = "public"
+    SESSION = "session"
+    USER = "user"
+    WORKFLOW = "workflow"
+    PRIVATE = "private"
+
+
+class ConsistencyClass(str, Enum):
+    IMMUTABLE = "immutable"
+    TTL = "ttl"
+    SOURCE_VERSIONED = "source_versioned"
+    WRITE_THROUGH = "write_through"
+    WRITE_BACK = "write_back"
 
 
 class ObjectMeta(BaseModel):
