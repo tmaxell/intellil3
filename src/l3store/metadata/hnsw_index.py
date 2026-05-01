@@ -48,7 +48,7 @@ class HNSWIndex:
 
         self._id_to_object: dict[int, str] = {}
         self._object_to_id: dict[str, int] = {}
-        self._deleted: set[str] = set()
+        self._free_ids: list[int] = []
         self._next_id = 0
 
     @property
@@ -56,19 +56,26 @@ class HNSWIndex:
         return self._dim
 
     def add(self, object_id: str, embedding: np.ndarray) -> None:
-        if object_id in self._object_to_id and object_id not in self._deleted:
+        if object_id in self._object_to_id:
             return
-        if self.size >= self._max_elements:
+        if not self._free_ids and self._next_id >= self._max_elements:
             raise ValueError("HNSWIndex max_elements limit reached")
 
         vector = self._prepare_embedding(embedding)
-        internal_id = self._next_id
-        self._next_id += 1
+        replace_deleted = bool(self._free_ids)
+        if replace_deleted:
+            internal_id = self._free_ids.pop()
+        else:
+            internal_id = self._next_id
+            self._next_id += 1
 
-        self._index.add_items(vector, np.array([internal_id], dtype=np.int64))
+        self._index.add_items(
+            vector,
+            np.array([internal_id], dtype=np.int64),
+            replace_deleted=replace_deleted,
+        )
         self._id_to_object[internal_id] = object_id
         self._object_to_id[object_id] = internal_id
-        self._deleted.discard(object_id)
 
         logger.debug("HNSW indexed semantic object %s as label %d", object_id, internal_id)
 
@@ -82,13 +89,13 @@ class HNSWIndex:
             return []
 
         query = self._prepare_embedding(query_embedding)
-        query_k = min(k + len(self._deleted), len(self._id_to_object))
+        query_k = min(k, len(self._id_to_object))
         labels, distances = self._index.knn_query(query, k=query_k)
 
         results: list[tuple[str, float]] = []
         for label, distance in zip(labels[0], distances[0]):
             object_id = self._id_to_object.get(int(label))
-            if object_id is None or object_id in self._deleted:
+            if object_id is None:
                 continue
 
             similarity = 1.0 - float(distance)
@@ -105,8 +112,8 @@ class HNSWIndex:
             return False
 
         self._id_to_object.pop(internal_id, None)
-        self._deleted.add(object_id)
         self._index.mark_deleted(internal_id)
+        self._free_ids.append(internal_id)
         logger.debug("HNSW removed semantic object %s", object_id)
         return True
 
