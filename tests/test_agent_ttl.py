@@ -43,6 +43,7 @@ def test_short_tool_call_pins_kv_blocks() -> None:
         action="pin",
         ttl_ms=250.0,
         reason="short_tool_call",
+        tool_call_id="tool_1",
         predicted_tool_latency_ms=100.0,
         reload_cost_ms=75.0,
         prefetch_delay_ms=None,
@@ -67,9 +68,11 @@ def test_long_tool_call_recommends_offload_with_prefetch_delay() -> None:
 
     assert decision.action == "offload"
     assert decision.reason == "long_tool_call"
+    assert decision.tool_call_id == "tool_1"
     assert decision.ttl_ms is None
     assert decision.prefetch_delay_ms == 1_050.0
     assert policy.stats()["kv_evicted"] == 1
+    assert policy.stats()["prefetch_scheduled"] == 1
 
 
 def test_no_tool_call_uses_default_retain_decision() -> None:
@@ -91,6 +94,51 @@ def test_decide_retention_returns_previous_decision() -> None:
 
     assert policy.decide_retention("step_cached") == decision
     assert policy.decide_retention("missing") is None
+
+
+def test_pending_prefetch_and_due_decision_for_long_tool_call() -> None:
+    estimator = ToolLatencyEstimator(default_latency_ms=1_000.0)
+    policy = AgentTTLPolicy(
+        estimator,
+        ttl_threshold_ms=100.0,
+        prefetch_margin_ms=200.0,
+    )
+    policy.on_llm_step_completed(
+        make_step(tool_call_id="tool_slow", kv_block_ids=["kv_1", "kv_2"]),
+        tool_name="browser",
+    )
+
+    pending = policy.pending_prefetches()
+    early = policy.prefetch_due("tool_slow", elapsed_ms=799.0)
+    due = policy.prefetch_due("tool_slow", elapsed_ms=800.0)
+    duplicate = policy.prefetch_due("tool_slow", elapsed_ms=1_000.0)
+
+    assert len(pending) == 1
+    assert pending[0].action == "offload"
+    assert early is None
+    assert due == AgentRetentionDecision(
+        step_id="step_1",
+        kv_block_ids=["kv_1", "kv_2"],
+        action="prefetch_later",
+        ttl_ms=None,
+        reason="prefetch_window_reached",
+        tool_call_id="tool_slow",
+        predicted_tool_latency_ms=1_000.0,
+        reload_cost_ms=150.0,
+        prefetch_delay_ms=800.0,
+    )
+    assert duplicate is None
+    assert policy.stats()["prefetch_triggered"] == 2
+
+
+def test_prefetch_due_ignores_unknown_pin_and_rejects_negative_elapsed() -> None:
+    policy = AgentTTLPolicy(ToolLatencyEstimator(default_latency_ms=10.0))
+    policy.on_llm_step_completed(make_step(tool_call_id="tool_fast"), tool_name="api")
+
+    assert policy.prefetch_due("unknown", elapsed_ms=1.0) is None
+    assert policy.prefetch_due("tool_fast", elapsed_ms=1.0) is None
+    with pytest.raises(ValueError, match="elapsed_ms"):
+        policy.prefetch_due("tool_fast", elapsed_ms=-1.0)
 
 
 def test_tool_completion_updates_latency_estimator_for_known_call() -> None:
@@ -127,6 +175,52 @@ def test_tracks_kv_reloads() -> None:
     policy.on_kv_reloaded(["kv_1", "kv_2", "kv_3"])
 
     assert policy.stats()["kv_reloaded"] == 3
+
+
+def test_reload_and_release_update_active_block_sets() -> None:
+    slow = AgentTTLPolicy(ToolLatencyEstimator(default_latency_ms=1_000.0))
+    slow.on_llm_step_completed(
+        make_step(kv_block_ids=["offloaded"]),
+        tool_name="browser",
+    )
+    slow.on_kv_reloaded(["offloaded"])
+
+    fast = AgentTTLPolicy(ToolLatencyEstimator(default_latency_ms=10.0))
+    fast.on_llm_step_completed(
+        make_step(kv_block_ids=["pinned"]),
+        tool_name="api",
+    )
+    fast.on_pinned_kv_released(["pinned"])
+
+    assert slow.stats()["offloaded_blocks"] == 0
+    assert fast.stats()["pinned_blocks"] == 0
+
+
+def test_snapshot_is_json_serializable_shape() -> None:
+    policy = AgentTTLPolicy(
+        ToolLatencyEstimator(default_latency_ms=900.0),
+        ttl_threshold_ms=100.0,
+        default_ttl_ms=200.0,
+        reload_cost_ms=50.0,
+        prefetch_margin_ms=25.0,
+    )
+    policy.on_llm_step_completed(
+        make_step(step_id="b_step", tool_call_id="tool_b", kv_block_ids=["kv_b"]),
+        tool_name="browser",
+    )
+    policy.prefetch_due("tool_b", elapsed_ms=875.0)
+
+    snapshot = policy.snapshot()
+
+    assert snapshot["config"] == {
+        "ttl_threshold_ms": 100.0,
+        "default_ttl_ms": 200.0,
+        "reload_cost_ms": 50.0,
+        "prefetch_margin_ms": 25.0,
+    }
+    assert snapshot["offloaded_blocks"] == ["kv_b"]
+    assert snapshot["prefetch_triggered_tool_calls"] == ["tool_b"]
+    assert snapshot["decisions"][0]["step_id"] == "b_step"
 
 
 @pytest.mark.parametrize(
