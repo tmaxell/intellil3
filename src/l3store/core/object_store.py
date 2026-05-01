@@ -11,6 +11,7 @@ from l3store.core.types import (
     AgentWorkflow,
     KVCacheBlock,
     ObjectType,
+    PlanCacheEntry,
     RAGObject,
     SemanticCacheEntry,
     ToolCallArtifact,
@@ -349,6 +350,60 @@ class UnifiedObjectStore:
     def list_tool_artifacts(self) -> list[str]:
         return self._list_ids(self._config.objects.agent.tools_prefix)
 
+    def put_plan_cache_entry(
+        self,
+        entry: PlanCacheEntry,
+        task_embedding: np.ndarray,
+    ) -> str:
+        prefix = self._config.objects.agent.plans_prefix
+        entry.meta.object_id = entry.plan_id
+        entry.meta.plan_id = entry.plan_id
+        entry.meta.scope = entry.validity_scope
+        entry.task_embedding_dim = task_embedding.shape[-1]
+        entry.meta.size_bytes = task_embedding.nbytes
+
+        self._put_pair(
+            f"{prefix}{entry.plan_id}.meta.json",
+            Serializer.serialize_plan_cache_entry(entry),
+            f"{prefix}{entry.plan_id}.data.npy",
+            Serializer.serialize_plan_embedding(task_embedding),
+        )
+        self._metadata.on_object_added(ObjectType.PLAN_CACHE, entry.plan_id)
+        return entry.plan_id
+
+    def get_plan_cache_entry(
+        self,
+        plan_id: str,
+    ) -> tuple[PlanCacheEntry, np.ndarray] | None:
+        if not self._metadata.might_exist(plan_id):
+            return None
+
+        prefix = self._config.objects.agent.plans_prefix
+        pair = self._get_pair(
+            f"{prefix}{plan_id}.meta.json",
+            f"{prefix}{plan_id}.data.npy",
+        )
+        if pair is None:
+            return None
+
+        entry = Serializer.deserialize_plan_cache_entry(pair[0])
+        embedding = Serializer.deserialize_plan_embedding(pair[1])
+        entry.meta.touch()
+        return entry, embedding
+
+    def delete_plan_cache_entry(self, plan_id: str) -> bool:
+        result = self._delete_pair(
+            self._config.objects.agent.plans_prefix,
+            plan_id,
+            "data.npy",
+        )
+        if result:
+            self._metadata.on_object_removed(ObjectType.PLAN_CACHE, plan_id)
+        return result
+
+    def list_plan_cache_entries(self) -> list[str]:
+        return self._list_ids(self._config.objects.agent.plans_prefix)
+
     def put_workflow_trace(self, trace: WorkflowTrace) -> str:
         prefix = self._config.objects.agent.traces_prefix
         trace.meta.object_id = trace.workflow_id
@@ -427,6 +482,7 @@ class UnifiedObjectStore:
             "agent_workflows": len(self.list_agent_workflows()),
             "agent_steps": len(self.list_agent_steps()),
             "tool_artifacts": len(self.list_tool_artifacts()),
+            "plan_cache_entries": len(self.list_plan_cache_entries()),
             "workflow_traces": len(self.list_workflow_traces()),
             "metadata": self._metadata.stats(),
         }

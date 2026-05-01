@@ -1,8 +1,11 @@
+import numpy as np
+
 from l3store.core.types import (
     AgentStep,
     AgentWorkflow,
     AgentWorkflowType,
     ArtifactScope,
+    PlanCacheEntry,
     ToolCallArtifact,
     WorkflowTrace,
 )
@@ -81,6 +84,33 @@ def test_tool_artifact_put_get_list_delete(store) -> None:
     assert store.get_tool_artifact(tool_call_id) is None
 
 
+def test_plan_cache_entry_put_get_list_delete(store) -> None:
+    embedding = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    entry = PlanCacheEntry(
+        plan_id="plan_1",
+        plan_template="1. Search\n2. Summarize",
+        required_tools=["search"],
+        constraints={"scope": "public"},
+        validity_scope=ArtifactScope.PUBLIC,
+    )
+
+    plan_id = store.put_plan_cache_entry(entry, embedding)
+    loaded = store.get_plan_cache_entry(plan_id)
+
+    assert loaded is not None
+    loaded_entry, loaded_embedding = loaded
+    assert loaded_entry.plan_id == "plan_1"
+    assert loaded_entry.meta.object_id == "plan_1"
+    assert loaded_entry.meta.plan_id == "plan_1"
+    assert loaded_entry.meta.scope == ArtifactScope.PUBLIC
+    assert loaded_entry.task_embedding_dim == 3
+    assert loaded_entry.meta.size_bytes == embedding.nbytes
+    np.testing.assert_array_equal(loaded_embedding, embedding)
+    assert store.list_plan_cache_entries() == ["plan_1"]
+    assert store.delete_plan_cache_entry(plan_id) is True
+    assert store.get_plan_cache_entry(plan_id) is None
+
+
 def test_workflow_trace_put_get_list_delete(store) -> None:
     trace = WorkflowTrace(
         workflow_id="workflow_1",
@@ -119,6 +149,10 @@ def test_agentic_stats_include_counts(store) -> None:
             expires_at=11.0,
         )
     )
+    store.put_plan_cache_entry(
+        PlanCacheEntry(plan_id="plan_1"),
+        np.array([1.0, 0.0], dtype=np.float32),
+    )
     store.put_workflow_trace(WorkflowTrace(workflow_id="workflow_1"))
 
     stats = store.stats()
@@ -126,4 +160,5 @@ def test_agentic_stats_include_counts(store) -> None:
     assert stats["agent_workflows"] == 1
     assert stats["agent_steps"] == 1
     assert stats["tool_artifacts"] == 1
+    assert stats["plan_cache_entries"] == 1
     assert stats["workflow_traces"] == 1
