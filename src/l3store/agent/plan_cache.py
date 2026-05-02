@@ -19,6 +19,16 @@ class PlanCacheCandidate:
     constraints: dict[str, str]
 
 
+@dataclass(frozen=True)
+class PlanAdaptationResult:
+    """Result of adapting a cached plan template to current context."""
+
+    plan_id: str
+    plan_template: str
+    adapted_template: str
+    context: dict[str, str]
+
+
 class PlanCacheManager:
     """
     Cache for structured plan templates.
@@ -47,7 +57,9 @@ class PlanCacheManager:
         self._puts = 0
         self._searches = 0
         self._hits = 0
+        self._validations = 0
         self._validation_failures = 0
+        self._deleted = 0
         self._load_existing_plans()
 
     def put_plan(
@@ -133,6 +145,7 @@ class PlanCacheManager:
         constraints: dict[str, str] | None = None,
         entry: PlanCacheEntry | None = None,
     ) -> bool:
+        self._validations += 1
         loaded_entry = entry
         if loaded_entry is None:
             loaded = self._store.get_plan_cache_entry(plan_id)
@@ -155,13 +168,19 @@ class PlanCacheManager:
         self,
         plan_id: str,
         current_context: dict[str, str] | None = None,
-    ) -> str | None:
+    ) -> PlanAdaptationResult | None:
         """Return the stored template; later revisions can add LLM adaptation."""
 
         loaded = self._store.get_plan_cache_entry(plan_id)
         if loaded is None:
             return None
-        return loaded[0].plan_template
+        template = loaded[0].plan_template
+        return PlanAdaptationResult(
+            plan_id=plan_id,
+            plan_template=template,
+            adapted_template=template,
+            context=dict(current_context or {}),
+        )
 
     def record_plan_result(self, plan_id: str, success: bool) -> bool:
         loaded = self._store.get_plan_cache_entry(plan_id)
@@ -173,15 +192,26 @@ class PlanCacheManager:
             entry.success_count += 1
         else:
             entry.failure_count += 1
+        self._index.remove(plan_id)
         self._store.put_plan_cache_entry(entry, embedding)
+        self._index.add(plan_id, embedding)
         return True
+
+    def delete_plan(self, plan_id: str) -> bool:
+        exists_in_store = self._store.get_plan_cache_entry(plan_id) is not None
+        removed_from_index = self._index.remove(plan_id)
+        removed_from_store = (
+            self._store.delete_plan_cache_entry(plan_id) if exists_in_store else False
+        )
+        if removed_from_index or removed_from_store:
+            self._deleted += 1
+        return removed_from_index or removed_from_store
 
     def stats(self) -> dict[str, int | float]:
         hit_rate = self._hits / self._searches if self._searches else 0.0
-        validation_total = self._searches + self._validation_failures
         validation_fail_rate = (
-            self._validation_failures / validation_total
-            if validation_total
+            self._validation_failures / self._validations
+            if self._validations
             else 0.0
         )
         return {
@@ -190,8 +220,33 @@ class PlanCacheManager:
             "searches": self._searches,
             "hits": self._hits,
             "plan_cache_hit_rate": hit_rate,
+            "validations": self._validations,
             "validation_failures": self._validation_failures,
             "plan_validation_fail_rate": validation_fail_rate,
+            "deleted": self._deleted,
+        }
+
+    def snapshot(self) -> dict[str, object]:
+        entries = []
+        for plan_id in sorted(self._store.list_plan_cache_entries()):
+            loaded = self._store.get_plan_cache_entry(plan_id)
+            if loaded is None:
+                continue
+            entry, _ = loaded
+            entries.append(
+                {
+                    "plan_id": plan_id,
+                    "required_tools": list(entry.required_tools),
+                    "constraints": dict(entry.constraints),
+                    "success_count": entry.success_count,
+                    "failure_count": entry.failure_count,
+                    "validity_scope": entry.validity_scope.value,
+                }
+            )
+        return {
+            "stats": self.stats(),
+            "similarity_threshold": self._threshold,
+            "plans": entries,
         }
 
     def _load_existing_plans(self) -> None:

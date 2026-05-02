@@ -3,7 +3,7 @@ import pytest
 
 hnswlib = pytest.importorskip("hnswlib")
 
-from l3store.agent import PlanCacheManager
+from l3store.agent import PlanAdaptationResult, PlanCacheManager
 from l3store.embeddings.base import EmbeddingService
 
 
@@ -90,7 +90,12 @@ def test_adapt_plan_returns_template_without_llm_adaptation(store) -> None:
         tools=["code"],
     )
 
-    assert manager.adapt_plan(plan_id, {"repo": "test"}) == "1. Inspect diff\n2. Run tests"
+    assert manager.adapt_plan(plan_id, {"repo": "test"}) == PlanAdaptationResult(
+        plan_id=plan_id,
+        plan_template="1. Inspect diff\n2. Run tests",
+        adapted_template="1. Inspect diff\n2. Run tests",
+        context={"repo": "test"},
+    )
     assert manager.adapt_plan("missing") is None
 
 
@@ -107,6 +112,51 @@ def test_record_plan_result_updates_success_and_failure_counts(store) -> None:
     assert entry.success_count == 1
     assert entry.failure_count == 1
     assert manager.record_plan_result("missing", success=True) is False
+
+
+def test_delete_plan_removes_from_store_and_index(store) -> None:
+    manager = PlanCacheManager(store, TopicEmbeddingService(), similarity_threshold=0.8)
+    plan_id = manager.put_plan("research task", "Search", tools=["search"])
+
+    assert manager.delete_plan(plan_id) is True
+    assert manager.delete_plan("missing") is False
+    assert store.get_plan_cache_entry(plan_id) is None
+    assert (
+        manager.search_similar_plans("search research", required_tools=["search"])
+        == []
+    )
+    assert manager.stats()["deleted"] == 1
+
+
+def test_snapshot_reports_plan_metrics_and_entries(store) -> None:
+    manager = PlanCacheManager(store, TopicEmbeddingService(), similarity_threshold=0.8)
+    plan_id = manager.put_plan(
+        "research task",
+        "Search",
+        tools=["search"],
+        constraints={"scope": "public"},
+    )
+    manager.record_plan_result(plan_id, success=True)
+    manager.search_similar_plans(
+        "search research",
+        required_tools=["search"],
+        constraints={"scope": "public"},
+    )
+
+    snapshot = manager.snapshot()
+
+    assert snapshot["similarity_threshold"] == 0.8
+    assert snapshot["stats"]["plan_cache_hit_rate"] == 1.0
+    assert snapshot["plans"] == [
+        {
+            "plan_id": plan_id,
+            "required_tools": ["search"],
+            "constraints": {"scope": "public"},
+            "success_count": 1,
+            "failure_count": 0,
+            "validity_scope": "session",
+        }
+    ]
 
 
 def test_rebuilds_index_from_existing_plans(store) -> None:
