@@ -30,6 +30,8 @@ class ToolArtifactCache:
         self._misses = 0
         self._expired = 0
         self._invalidated = 0
+        self._reindexed = 0
+        self._purged = 0
 
     def put_tool_artifact(
         self,
@@ -71,8 +73,12 @@ class ToolArtifactCache:
             expires_at=created_at + ttl,
         )
 
+        key = (tool_name, args_hash, scope)
+        previous_id = self._index.get(key)
         object_id = self._store.put_tool_artifact(artifact)
-        self._index[(tool_name, args_hash, scope)] = object_id
+        if previous_id is not None and previous_id != object_id:
+            self._store.delete_tool_artifact(previous_id)
+        self._index[key] = object_id
         self._puts += 1
         return object_id
 
@@ -106,6 +112,8 @@ class ToolArtifactCache:
             self._misses += 1
             return None
         if artifact.is_expired(self._now(now)):
+            self._index.pop(key, None)
+            self._store.delete_tool_artifact(object_id)
             self._expired += 1
             self._misses += 1
             return None
@@ -139,6 +147,60 @@ class ToolArtifactCache:
         self._invalidated += deleted
         return deleted
 
+    def rebuild_index(self, now: float | None = None) -> int:
+        """Rebuild the in-memory lookup index from persisted artifacts."""
+
+        self._index.clear()
+        current_time = self._now(now)
+        indexed = 0
+        for object_id in self._store.list_tool_artifacts():
+            artifact = self._store.get_tool_artifact(object_id)
+            if artifact is None:
+                continue
+            if artifact.is_expired(current_time):
+                self._store.delete_tool_artifact(object_id)
+                self._purged += 1
+                continue
+
+            key = (
+                artifact.tool_name,
+                artifact.tool_args_hash,
+                artifact.permission_scope,
+            )
+            current_id = self._index.get(key)
+            if current_id is None:
+                self._index[key] = artifact.tool_call_id
+                indexed += 1
+                continue
+
+            current_artifact = self._store.get_tool_artifact(current_id)
+            if (
+                current_artifact is None
+                or artifact.expires_at > current_artifact.expires_at
+            ):
+                self._index[key] = artifact.tool_call_id
+
+        self._reindexed += indexed
+        return indexed
+
+    def purge_expired(self, now: float | None = None) -> int:
+        """Delete expired indexed artifacts from storage and the cache index."""
+
+        current_time = self._now(now)
+        purged = 0
+        for key, object_id in list(self._index.items()):
+            artifact = self._store.get_tool_artifact(object_id)
+            if artifact is None:
+                self._index.pop(key, None)
+                continue
+            if artifact.is_expired(current_time):
+                self._index.pop(key, None)
+                if self._store.delete_tool_artifact(object_id):
+                    purged += 1
+
+        self._purged += purged
+        return purged
+
     def stats(self) -> dict[str, int | float]:
         total_gets = self._hits + self._misses
         hit_rate = self._hits / total_gets if total_gets else 0.0
@@ -149,7 +211,28 @@ class ToolArtifactCache:
             "misses": self._misses,
             "expired": self._expired,
             "invalidated": self._invalidated,
+            "reindexed": self._reindexed,
+            "purged": self._purged,
             "hit_rate": hit_rate,
+            "tool_cache_hit_rate": hit_rate,
+        }
+
+    def snapshot(self) -> dict[str, object]:
+        return {
+            "stats": self.stats(),
+            "require_source_version": self._require_source_version,
+            "entries": [
+                {
+                    "tool_name": tool_name,
+                    "tool_args_hash": args_hash,
+                    "scope": scope.value,
+                    "object_id": object_id,
+                }
+                for (tool_name, args_hash, scope), object_id in sorted(
+                    self._index.items(),
+                    key=lambda item: (item[0][0], item[0][1], item[0][2].value),
+                )
+            ],
         }
 
     @staticmethod
