@@ -157,3 +157,62 @@ def test_validates_parameters_and_step_id() -> None:
         raise AssertionError("expected ValueError")
     except ValueError as exc:
         assert "step_id" in str(exc)
+
+
+def test_tracks_precision_recall_waste_and_latency_saved() -> None:
+    graph = AgentStepGraph()
+    graph.add_step("workflow_1", "step_1", "planner")
+    graph.add_step("workflow_1", "step_2", "executor")
+    policy = AgentPrefetchPolicy(graph, current_step_id="step_1")
+    policy.register_step_objects(
+        "step_2",
+        AgentStepObjects(kv_block_ids=["kv_1", "kv_2"]),
+    )
+
+    policy.predict_prefetch(make_request(), MetadataStore())
+    policy.on_prefetch_used("kv_1", latency_saved_ms=12.5)
+    policy.on_prefetch_wasted("kv_2", size_bytes=2048)
+    policy.on_objects_requested(["kv_1", "kv_3"])
+
+    stats = policy.stats()
+
+    assert stats["agent_prefetch_use_rate"] == 0.5
+    assert stats["prefetch_precision"] == 0.5
+    assert stats["prefetch_recall"] == 0.5
+    assert stats["wasted_prefetch_bytes"] == 2048
+    assert stats["latency_saved_ms"] == 12.5
+
+
+def test_snapshot_reports_prefetch_state() -> None:
+    graph = AgentStepGraph()
+    graph.add_step("workflow_1", "step_1", "planner")
+    graph.add_step("workflow_1", "step_2", "executor")
+    policy = AgentPrefetchPolicy(graph, current_step_id="step_1")
+    policy.register_step_objects("step_2", AgentStepObjects(kv_block_ids=["kv_1"]))
+
+    policy.predict_prefetch(make_request(), MetadataStore())
+    policy.on_prefetch_used("kv_1")
+
+    snapshot = policy.snapshot()
+
+    assert snapshot["current_step_id"] == "step_1"
+    assert snapshot["indexed_step_ids"] == ["step_2"]
+    assert snapshot["predicted_object_ids"] == ["kv_1"]
+    assert snapshot["used_prefetch_ids"] == ["kv_1"]
+
+
+def test_rejects_negative_metric_values() -> None:
+    graph = AgentStepGraph()
+    policy = AgentPrefetchPolicy(graph)
+
+    try:
+        policy.on_prefetch_used("kv_1", latency_saved_ms=-1.0)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "latency_saved_ms" in str(exc)
+
+    try:
+        policy.on_prefetch_wasted("kv_1", size_bytes=-1)
+        raise AssertionError("expected ValueError")
+    except ValueError as exc:
+        assert "size_bytes" in str(exc)

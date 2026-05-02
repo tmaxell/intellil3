@@ -63,8 +63,14 @@ class AgentPrefetchPolicy(PrefetchPolicy):
         self._next_step_top_k = next_step_top_k
         self._max_decisions = max_decisions
         self._step_objects: dict[str, AgentStepObjects] = {}
+        self._predicted_object_ids: set[str] = set()
+        self._used_prefetch_ids: set[str] = set()
         self._requests = 0
         self._agent_prefetch_count = 0
+        self._expected_object_count = 0
+        self._recall_hit_count = 0
+        self._wasted_prefetch_bytes = 0
+        self._latency_saved_ms = 0.0
 
     @property
     def current_step_id(self) -> str | None:
@@ -122,6 +128,7 @@ class AgentPrefetchPolicy(PrefetchPolicy):
         )
         decisions = self._decisions_for_steps(next_steps)
         self._agent_prefetch_count += len(decisions)
+        self._predicted_object_ids.update(decision.object_id for decision in decisions)
 
         logger.debug(
             "Agent prefetch produced %d decisions for current_step=%s session=%s",
@@ -131,11 +138,65 @@ class AgentPrefetchPolicy(PrefetchPolicy):
         )
         return decisions
 
+    def on_prefetch_used(
+        self,
+        object_id: str,
+        latency_saved_ms: float = 0.0,
+    ) -> None:
+        """Record that a prefetched object was later used by execution."""
+
+        if latency_saved_ms < 0:
+            raise ValueError("latency_saved_ms must be non-negative")
+        if object_id in self._predicted_object_ids:
+            self._used_prefetch_ids.add(object_id)
+            self._latency_saved_ms += latency_saved_ms
+
+    def on_prefetch_wasted(
+        self,
+        object_id: str,
+        size_bytes: int = 0,
+    ) -> None:
+        """Record a prefetched object that was not used before eviction/expiry."""
+
+        if size_bytes < 0:
+            raise ValueError("size_bytes must be non-negative")
+        if object_id in self._predicted_object_ids:
+            self._wasted_prefetch_bytes += size_bytes
+
+    def on_objects_requested(self, object_ids: list[str]) -> None:
+        """Record objects actually requested, enabling recall calculation."""
+
+        requested = set(object_id for object_id in object_ids if object_id)
+        self._expected_object_count += len(requested)
+        self._recall_hit_count += len(requested & self._predicted_object_ids)
+
     def stats(self) -> dict[str, int | float]:
+        precision = 0.0
+        if self._agent_prefetch_count:
+            precision = len(self._used_prefetch_ids) / self._agent_prefetch_count
+
+        recall = 0.0
+        if self._expected_object_count:
+            recall = self._recall_hit_count / self._expected_object_count
+
         return {
             "requests": self._requests,
             "agent_prefetch_count": self._agent_prefetch_count,
+            "agent_prefetch_use_rate": precision,
+            "prefetch_precision": precision,
+            "prefetch_recall": recall,
+            "wasted_prefetch_bytes": self._wasted_prefetch_bytes,
+            "latency_saved_ms": self._latency_saved_ms,
             "indexed_steps": len(self._step_objects),
+        }
+
+    def snapshot(self) -> dict[str, object]:
+        return {
+            "stats": self.stats(),
+            "current_step_id": self._current_step_id,
+            "indexed_step_ids": sorted(self._step_objects),
+            "predicted_object_ids": sorted(self._predicted_object_ids),
+            "used_prefetch_ids": sorted(self._used_prefetch_ids),
         }
 
     def _decisions_for_steps(self, step_ids: list[str]) -> list[PrefetchDecision]:

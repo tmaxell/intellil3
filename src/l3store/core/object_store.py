@@ -464,6 +464,10 @@ class UnifiedObjectStore:
             return self.get_rag_object(object_id)
         if prefetch_type == "semantic":
             return self.get_semantic_entry(object_id)
+        if prefetch_type == "tool_artifact":
+            return self.get_tool_artifact(object_id)
+        if prefetch_type == "plan_cache":
+            return self.get_plan_cache_entry(object_id)
 
         logger.debug(
             "Skipping unknown prefetch type %r for object %s",
