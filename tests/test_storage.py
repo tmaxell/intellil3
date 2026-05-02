@@ -1,7 +1,13 @@
 import numpy as np
 import pytest
 
-from l3store.core.types import KVCacheBlock, RAGObject, SemanticCacheEntry
+from l3store.core.types import (
+    KVCacheBlock,
+    PlanCacheEntry,
+    RAGObject,
+    SemanticCacheEntry,
+    ToolCallArtifact,
+)
 from l3store.policies.prefetch import PrefetchDecision
 
 
@@ -156,19 +162,37 @@ class TestPrefetchBatch:
             SemanticCacheEntry(prompt_text="prompt", response_text="response"),
             sem_emb,
         )
+        tool_id = store.put_tool_artifact(
+            ToolCallArtifact(
+                tool_call_id="tool_1",
+                tool_name="search",
+                tool_args_hash="args",
+                ttl=10.0,
+                created_at=1.0,
+                expires_at=11.0,
+            )
+        )
+        plan_id = store.put_plan_cache_entry(
+            PlanCacheEntry(plan_id="plan_1", plan_template="plan"),
+            np.array([1.0, 0.0], dtype=np.float32),
+        )
 
         results = store.prefetch_batch(
             [
                 PrefetchDecision(kv_id, 1.0, "kv_cache"),
                 PrefetchDecision(rag_id, 0.8, "rag"),
                 PrefetchDecision(sem_id, 0.9, "semantic"),
+                PrefetchDecision(tool_id, 0.7, "tool_artifact"),
+                PrefetchDecision(plan_id, 0.6, "plan_cache"),
             ]
         )
 
-        assert set(results) == {kv_id, rag_id, sem_id}
+        assert set(results) == {kv_id, rag_id, sem_id, tool_id, plan_id}
         assert results[kv_id][0].meta.object_id == kv_id
         assert results[rag_id][0].document_id == "doc"
         assert results[sem_id][0].response_text == "response"
+        assert results[tool_id].tool_name == "search"
+        assert results[plan_id][0].plan_template == "plan"
 
     def test_prefetch_batch_skips_duplicates_missing_and_unknown(self, store):
         emb = np.array([1.0, 0.0, 0.0], dtype=np.float32)
