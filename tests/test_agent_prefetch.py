@@ -199,6 +199,29 @@ def test_snapshot_reports_prefetch_state() -> None:
     assert snapshot["indexed_step_ids"] == ["step_2"]
     assert snapshot["predicted_object_ids"] == ["kv_1"]
     assert snapshot["used_prefetch_ids"] == ["kv_1"]
+    assert snapshot["wasted_prefetch_ids"] == []
+
+
+def test_metric_events_are_counted_once_per_object() -> None:
+    graph = AgentStepGraph()
+    graph.add_step("workflow_1", "step_1", "planner")
+    graph.add_step("workflow_1", "step_2", "executor")
+    policy = AgentPrefetchPolicy(graph, current_step_id="step_1")
+    policy.register_step_objects(
+        "step_2",
+        AgentStepObjects(kv_block_ids=["kv_1", "kv_2"]),
+    )
+    policy.predict_prefetch(make_request(), MetadataStore())
+
+    policy.on_prefetch_used("kv_1", latency_saved_ms=10.0)
+    policy.on_prefetch_used("kv_1", latency_saved_ms=10.0)
+    policy.on_prefetch_wasted("kv_2", size_bytes=100)
+    policy.on_prefetch_wasted("kv_2", size_bytes=100)
+
+    stats = policy.stats()
+
+    assert stats["latency_saved_ms"] == 10.0
+    assert stats["wasted_prefetch_bytes"] == 100
 
 
 def test_rejects_negative_metric_values() -> None:

@@ -65,6 +65,7 @@ class AgentPrefetchPolicy(PrefetchPolicy):
         self._step_objects: dict[str, AgentStepObjects] = {}
         self._predicted_object_ids: set[str] = set()
         self._used_prefetch_ids: set[str] = set()
+        self._wasted_prefetch_ids: set[str] = set()
         self._requests = 0
         self._agent_prefetch_count = 0
         self._expected_object_count = 0
@@ -147,7 +148,7 @@ class AgentPrefetchPolicy(PrefetchPolicy):
 
         if latency_saved_ms < 0:
             raise ValueError("latency_saved_ms must be non-negative")
-        if object_id in self._predicted_object_ids:
+        if object_id in self._predicted_object_ids and object_id not in self._used_prefetch_ids:
             self._used_prefetch_ids.add(object_id)
             self._latency_saved_ms += latency_saved_ms
 
@@ -160,7 +161,11 @@ class AgentPrefetchPolicy(PrefetchPolicy):
 
         if size_bytes < 0:
             raise ValueError("size_bytes must be non-negative")
-        if object_id in self._predicted_object_ids:
+        if (
+            object_id in self._predicted_object_ids
+            and object_id not in self._wasted_prefetch_ids
+        ):
+            self._wasted_prefetch_ids.add(object_id)
             self._wasted_prefetch_bytes += size_bytes
 
     def on_objects_requested(self, object_ids: list[str]) -> None:
@@ -197,6 +202,7 @@ class AgentPrefetchPolicy(PrefetchPolicy):
             "indexed_step_ids": sorted(self._step_objects),
             "predicted_object_ids": sorted(self._predicted_object_ids),
             "used_prefetch_ids": sorted(self._used_prefetch_ids),
+            "wasted_prefetch_ids": sorted(self._wasted_prefetch_ids),
         }
 
     def _decisions_for_steps(self, step_ids: list[str]) -> list[PrefetchDecision]:
