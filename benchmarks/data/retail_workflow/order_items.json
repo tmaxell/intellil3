@@ -1,0 +1,44 @@
+[
+  {
+    "order_id": "ORD-1001",
+    "item_id": "ITEM-1001-1",
+    "sku": "KB-001",
+    "quantity": 1,
+    "unit_price": 120.0
+  },
+  {
+    "order_id": "ORD-1002",
+    "item_id": "ITEM-1002-1",
+    "sku": "SN-003",
+    "quantity": 1,
+    "unit_price": 80.0
+  },
+  {
+    "order_id": "ORD-1003",
+    "item_id": "ITEM-1003-1",
+    "sku": "TS-002",
+    "quantity": 2,
+    "unit_price": 35.0
+  },
+  {
+    "order_id": "ORD-1003",
+    "item_id": "ITEM-1003-2",
+    "sku": "MUG-010",
+    "quantity": 1,
+    "unit_price": 15.0
+  },
+  {
+    "order_id": "ORD-1004",
+    "item_id": "ITEM-1004-1",
+    "sku": "HP-004",
+    "quantity": 1,
+    "unit_price": 60.0
+  },
+  {
+    "order_id": "ORD-1005",
+    "item_id": "ITEM-1005-1",
+    "sku": "SH-020",
+    "quantity": 1,
+    "unit_price": 90.0
+  }
+]

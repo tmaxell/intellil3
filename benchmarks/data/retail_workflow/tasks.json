@@ -1,0 +1,135 @@
+[
+  {
+    "task_id": "TASK-001",
+    "goal_type": "approved_refund_full",
+    "difficulty": "easy",
+    "input": {
+      "order_id": "ORD-1001",
+      "request_type": "refund",
+      "reason": "defective_item",
+      "requested_item_id": "ITEM-1001-1"
+    },
+    "required_tools": ["get_order", "search_policy", "calculate_refund", "submit_refund"],
+    "allow_fallback": false,
+    "expected_outcome": {
+      "decision": "approve_refund",
+      "refund_amount": 120.0,
+      "currency": "USD",
+      "reason_code": "within_return_window"
+    },
+    "fallback_outcome": null
+  },
+  {
+    "task_id": "TASK-002",
+    "goal_type": "denied_refund_outside_window",
+    "difficulty": "easy",
+    "input": {
+      "order_id": "ORD-1002",
+      "request_type": "refund",
+      "reason": "changed_mind",
+      "requested_item_id": "ITEM-1002-1"
+    },
+    "required_tools": ["get_order", "search_policy"],
+    "allow_fallback": true,
+    "expected_outcome": {
+      "decision": "deny_refund",
+      "refund_amount": 0.0,
+      "currency": "USD",
+      "reason_code": "outside_return_window"
+    },
+    "fallback_outcome": {
+      "decision": "offer_store_credit",
+      "reason_code": "courtesy_option"
+    }
+  },
+  {
+    "task_id": "TASK-003",
+    "goal_type": "approved_refund_partial",
+    "difficulty": "medium",
+    "input": {
+      "order_id": "ORD-1003",
+      "request_type": "refund",
+      "reason": "wrong_size",
+      "requested_item_id": "ITEM-1003-1",
+      "requested_quantity": 1
+    },
+    "required_tools": ["get_order", "search_policy", "calculate_refund", "submit_refund"],
+    "allow_fallback": false,
+    "expected_outcome": {
+      "decision": "approve_refund",
+      "refund_amount": 35.0,
+      "currency": "USD",
+      "reason_code": "partial_refund_allowed"
+    },
+    "fallback_outcome": null
+  },
+  {
+    "task_id": "TASK-004",
+    "goal_type": "invalid_order_denial",
+    "difficulty": "easy",
+    "input": {
+      "order_id": "ORD-9999",
+      "request_type": "refund",
+      "reason": "not_received"
+    },
+    "required_tools": ["get_order"],
+    "allow_fallback": true,
+    "expected_outcome": {
+      "decision": "deny_refund",
+      "refund_amount": 0.0,
+      "currency": "USD",
+      "reason_code": "order_not_found"
+    },
+    "fallback_outcome": {
+      "decision": "request_order_details",
+      "reason_code": "missing_order_context"
+    }
+  },
+  {
+    "task_id": "TASK-005",
+    "goal_type": "exchange_unavailable_fallback",
+    "difficulty": "medium",
+    "input": {
+      "order_id": "ORD-1002",
+      "request_type": "exchange",
+      "reason": "item_too_small",
+      "requested_item_id": "ITEM-1002-1",
+      "target_sku": "SN-003"
+    },
+    "required_tools": ["get_order", "search_policy", "update_return_request"],
+    "allow_fallback": true,
+    "expected_outcome": {
+      "decision": "deny_exchange",
+      "refund_amount": 0.0,
+      "currency": "USD",
+      "reason_code": "exchange_item_unavailable"
+    },
+    "fallback_outcome": {
+      "decision": "offer_refund_or_store_credit",
+      "reason_code": "exchange_fallback"
+    }
+  },
+  {
+    "task_id": "TASK-006",
+    "goal_type": "order_not_delivered_denial",
+    "difficulty": "easy",
+    "input": {
+      "order_id": "ORD-1004",
+      "request_type": "refund",
+      "reason": "changed_mind",
+      "requested_item_id": "ITEM-1004-1"
+    },
+    "required_tools": ["get_order", "search_policy"],
+    "allow_fallback": true,
+    "expected_outcome": {
+      "decision": "deny_refund",
+      "refund_amount": 0.0,
+      "currency": "USD",
+      "reason_code": "order_not_delivered"
+    },
+    "fallback_outcome": {
+      "decision": "offer_order_cancellation_if_possible",
+      "reason_code": "pre_delivery_flow"
+    }
+  }
+]
