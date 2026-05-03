@@ -209,6 +209,86 @@ def test_rag_metrics_are_higher_is_better_in_catalog() -> None:
 # Existing workloads are not broken (E2 — backward compatibility)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# MeasurementSuite with repetitions > 1 (G: additional coverage)
+# ---------------------------------------------------------------------------
+
+def test_measurement_suite_multiple_repetitions_produce_consistent_rag_metrics(tmp_path) -> None:
+    config_path = tmp_path / "rag_rep.yaml"
+    config_path.write_text(
+        """
+experiment:
+  name: "rag repetitions smoke"
+workload:
+  type: "rag_realistic"
+  data_dir: "benchmarks/data/rag_realistic"
+  num_queries: 6
+  retrieval_top_k: 3
+systems:
+  - name: "rag_realistic_baseline"
+    type: "rag_realistic_baseline"
+  - name: "rag_realistic_enhanced"
+    type: "rag_realistic_enhanced"
+""",
+        encoding="utf-8",
+    )
+    summary = MeasurementSuite(
+        config_path=config_path,
+        output_dir=tmp_path / "out",
+        repetitions=3,
+    ).run()
+
+    assert summary.repetitions == 3
+    for system_name, metrics in summary.systems.items():
+        assert _RAG_METRIC_KEYS <= set(metrics.keys()), f"Missing RAG keys for {system_name}"
+        for key in _RAG_METRIC_KEYS:
+            samples = metrics[key].get("samples", [])
+            assert len(samples) == 3, f"Expected 3 repetition samples for {key}, got {len(samples)}"
+            assert all(0.0 <= v <= 1.0 for v in samples), f"Out-of-range sample in {key}: {samples}"
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline via registered YAML system names (G: additional coverage)
+# ---------------------------------------------------------------------------
+
+def test_full_pipeline_via_registered_system_names(tmp_path) -> None:
+    """End-to-end: BenchmarkRunner → MeasurementSuite → run_comparison using only
+    registered system type strings (no injected instances) — mirrors real usage."""
+    config_path = tmp_path / "exp10_smoke.yaml"
+    config_path.write_text(
+        """
+experiment:
+  name: "rag full pipeline smoke"
+workload:
+  type: "rag_realistic"
+  data_dir: "benchmarks/data/rag_realistic"
+  num_queries: 6
+  retrieval_top_k: 3
+systems:
+  - name: "rag_realistic_baseline"
+    type: "rag_realistic_baseline"
+  - name: "rag_realistic_enhanced"
+    type: "rag_realistic_enhanced"
+""",
+        encoding="utf-8",
+    )
+    output_dir = tmp_path / "full_pipeline"
+    comparison = run_comparison(
+        config_path=config_path,
+        output_dir=output_dir,
+        repetitions=1,
+        baseline_system="rag_realistic_baseline",
+        candidate_system="rag_realistic_enhanced",
+    )
+    metric_names = {m.metric for m in comparison.metrics}
+    assert _RAG_METRIC_KEYS <= metric_names, f"Missing: {_RAG_METRIC_KEYS - metric_names}"
+
+    # Verify all three artifact files exist and contain RAG metric names.
+    for artifact in ("comparison.json", "comparison.csv", "comparison_report.md"):
+        text = (output_dir / artifact).read_text(encoding="utf-8")
+        assert "evidence_recall" in text, f"evidence_recall missing from {artifact}"
+
+
 def test_existing_rag_heavy_workload_unaffected() -> None:
     from benchmarks.measurement.synthetic_systems import NoSystemBaseline
     runner = BenchmarkRunner(

@@ -223,3 +223,58 @@ def test_benchmark_runner_builds_rag_realistic_workload() -> None:
 def test_realistic_rag_workload_validates_parameters(kwargs, match) -> None:
     with pytest.raises(ValueError, match=match):
         RealisticRAGWorkload(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Query cycling (G: additional coverage)
+# ---------------------------------------------------------------------------
+
+def test_workload_cycles_queries_when_num_queries_exceeds_dataset() -> None:
+    """When num_queries > dataset size the workload must cycle deterministically."""
+    dataset_size = len(RealisticRAGWorkload(data_dir=_DATA_DIR).generate())
+    num_queries = dataset_size * 2 + 3
+    workload = RealisticRAGWorkload(data_dir=_DATA_DIR, num_queries=num_queries)
+    requests = workload.generate()
+
+    assert len(requests) == num_queries
+    # First cycle and second cycle must have identical query_ids in order.
+    first_ids = [r.metadata["query_id"] for r in requests[:dataset_size]]
+    second_ids = [r.metadata["query_id"] for r in requests[dataset_size : dataset_size * 2]]
+    assert first_ids == second_ids
+
+
+def test_workload_cycling_is_deterministic_across_instances() -> None:
+    a = RealisticRAGWorkload(data_dir=_DATA_DIR, num_queries=25, seed=1).generate()
+    b = RealisticRAGWorkload(data_dir=_DATA_DIR, num_queries=25, seed=1).generate()
+    assert [r.metadata["query_id"] for r in a] == [r.metadata["query_id"] for r in b]
+
+
+# ---------------------------------------------------------------------------
+# Multi-hop queries in workload (G: additional coverage)
+# ---------------------------------------------------------------------------
+
+def test_multi_hop_queries_carry_multiple_gold_evidence_ids() -> None:
+    """Multi-hop queries must expose >= 2 gold passage IDs when min_required_evidence >= 2."""
+    import json as _json
+    from pathlib import Path as _Path
+    qrels = {
+        row["query_id"]: row
+        for row in [
+            _json.loads(line)
+            for line in (_Path(_DATA_DIR) / "qrels.jsonl").read_text().splitlines()
+            if line.strip()
+        ]
+    }
+    workload = RealisticRAGWorkload(data_dir=_DATA_DIR)
+    requests = workload.generate()
+    multi_hop = [r for r in requests if r.metadata["question_type"] == "multi_hop"]
+    assert len(multi_hop) >= 1
+
+    for r in multi_hop:
+        qid = str(r.metadata["query_id"])
+        min_req = qrels[qid]["min_required_evidence"]
+        if min_req >= 2:
+            gold_ids = [g for g in str(r.metadata["gold_evidence_ids"]).split(",") if g]
+            assert len(gold_ids) >= 2, (
+                f"Multi-hop {qid} (min_req={min_req}) has only {len(gold_ids)} gold IDs"
+            )
