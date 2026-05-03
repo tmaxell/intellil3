@@ -435,7 +435,7 @@ def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
     if key in {"current_intellil3", "l3_full", "l3_measurement_system", "b1"}:
         return SyntheticL3System()
     if key in {"agent_lru", "baseline_lru", "baseline_lru_l3", "lru_l3", "lru", "b2"}:
-        if workload_type == "agentic_workflow":
+        if workload_type in {"agentic_workflow", "retail_support_workflow"}:
             return AgentLRUBaseline()
         return NoSystemBaseline()
     if key in {"prefix reuse", "prefix_reuse", "prefix-reuse"}:
