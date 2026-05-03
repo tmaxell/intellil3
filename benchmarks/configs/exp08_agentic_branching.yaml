@@ -1,0 +1,24 @@
+experiment:
+  name: "Agentic Branching Workflow"
+  description: "Synthetic branching/speculative workflow for prefetch precision"
+
+workload:
+  type: "agentic_workflow"
+  scenario: "branching"
+  num_workflows: 40
+  num_agents: 2
+  turns_per_workflow: 6
+  shared_system_prompt_ratio: 0.7
+  tool_call_probability: 0.6
+  tool_latency_distribution: [100.0, 900.0]
+  rag_call_probability: 0.3
+  branching_factor: 3.0
+  plan_reuse_probability: 0.8
+  context_growth_per_turn: 128
+  seed: 45
+
+systems:
+  - name: "agent_prefetch"
+    type: "agent_prefetch"
+  - name: "full_agentic_active_l3"
+    type: "agentic_active_l3"

@@ -12,6 +12,7 @@ import yaml
 from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
 from benchmarks.metrics import Metrics
 from benchmarks.workloads import (
+    AgenticWorkflowWorkload,
     LongContextWorkload,
     MultiUserChatWorkload,
     RAGHeavyWorkload,
@@ -124,6 +125,8 @@ class BenchmarkRunner:
             return MultiUserChatWorkload(**kwargs)
         if workload_type == "rag_heavy":
             return RAGHeavyWorkload(**kwargs)
+        if workload_type == "agentic_workflow":
+            return AgenticWorkflowWorkload(**kwargs)
         raise ValueError(f"Unknown workload type: {workload_type}")
 
 
