@@ -1,0 +1,10 @@
+{"query_id":"Q001","relevant_passage_ids":["P001","P002"],"min_required_evidence":1}
+{"query_id":"Q002","relevant_passage_ids":["P003"],"min_required_evidence":1}
+{"query_id":"Q003","relevant_passage_ids":["P006"],"min_required_evidence":1}
+{"query_id":"Q004","relevant_passage_ids":["P007"],"min_required_evidence":1}
+{"query_id":"Q005","relevant_passage_ids":["P008"],"min_required_evidence":1}
+{"query_id":"Q006","relevant_passage_ids":["P011"],"min_required_evidence":1}
+{"query_id":"Q007","relevant_passage_ids":["P012"],"min_required_evidence":1}
+{"query_id":"Q008","relevant_passage_ids":["P020"],"min_required_evidence":1}
+{"query_id":"Q009","relevant_passage_ids":[],"min_required_evidence":0}
+{"query_id":"Q010","relevant_passage_ids":["P017","P018"],"min_required_evidence":2}
