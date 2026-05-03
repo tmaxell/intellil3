@@ -9,7 +9,7 @@ from benchmarks.measurement.run_all_comparisons import (
     render_comparison_index_csv,
     render_comparison_index_markdown,
 )
-from benchmarks.measurement.run_comparison import _parse_targets
+from benchmarks.measurement.run_comparison import _parse_targets, run_comparison
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 
@@ -61,7 +61,9 @@ def test_render_comparison_outputs_status_columns() -> None:
     csv_text = render_comparison_csv(comparison)
 
     assert "Status" in markdown
+    assert "Group" in markdown
     assert "latency_p95_ms" in csv_text
+    assert "metric_group" in csv_text
     assert "meets_target" in csv_text
 
 
@@ -123,6 +125,44 @@ def test_render_comparison_index() -> None:
     assert "Benchmark Comparison Index" in markdown
     assert "comparison test" in csv_text
     assert "latency_p95_ms" in csv_text
+    assert "workflow_cache_hit_rate" in csv_text
+    assert "agentic" in markdown
+
+
+def test_run_comparison_infers_systems_from_config(tmp_path) -> None:
+    config_path = tmp_path / "agentic.yaml"
+    config_path.write_text(
+        """
+experiment:
+  name: "Agentic inferred comparison"
+workload:
+  type: "agentic_workflow"
+  scenario: "react"
+  num_workflows: 1
+  turns_per_workflow: 3
+  seed: 21
+systems:
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "agentic_active_l3"
+    type: "agentic_active_l3"
+""",
+        encoding="utf-8",
+    )
+
+    comparison = run_comparison(
+        config_path=config_path,
+        output_dir=tmp_path / "results",
+        repetitions=1,
+    )
+
+    assert comparison.baseline_system == "baseline_lru"
+    assert comparison.candidate_system == "agentic_active_l3"
+    assert any(
+        metric.metric == "workflow_cache_hit_rate"
+        for metric in comparison.metrics
+    )
+    assert (tmp_path / "results" / "comparison.csv").exists()
 
 
 def _summary() -> MeasurementSummary:
@@ -144,6 +184,12 @@ def _summary() -> MeasurementSummary:
                     "min": 48.0,
                     "max": 52.0,
                 },
+                "workflow_cache_hit_rate": {
+                    "mean": 0.25,
+                    "std": 0.01,
+                    "min": 0.24,
+                    "max": 0.26,
+                },
             },
             "candidate": {
                 "latency_p95_ms": {
@@ -157,6 +203,12 @@ def _summary() -> MeasurementSummary:
                     "std": 4.0,
                     "min": 96.0,
                     "max": 104.0,
+                },
+                "workflow_cache_hit_rate": {
+                    "mean": 0.75,
+                    "std": 0.02,
+                    "min": 0.73,
+                    "max": 0.77,
                 },
             },
         },

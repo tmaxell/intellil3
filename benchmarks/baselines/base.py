@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from benchmarks.workloads.base import BenchmarkRequest
 
@@ -14,6 +14,7 @@ class ProcessResult:
     is_cache_hit: bool = False
     prefetched: int = 0
     useful_prefetch: int = 0
+    extra_metrics: dict[str, float | int] = field(default_factory=dict)
 
 
 class BenchmarkSystem(ABC):
