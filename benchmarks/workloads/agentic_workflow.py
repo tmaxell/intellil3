@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import random
+from typing import Literal
 
 from benchmarks.workloads.base import BenchmarkRequest, Workload
 from l3store.core.types import WorkflowTrace
+
+AgenticScenario = Literal["react", "multi_agent", "tool_rag", "branching"]
 
 
 class AgenticWorkflowWorkload(Workload):
@@ -12,6 +15,7 @@ class AgenticWorkflowWorkload(Workload):
 
     def __init__(
         self,
+        scenario: AgenticScenario = "react",
         num_workflows: int = 10,
         num_agents: int = 1,
         turns_per_workflow: int = 4,
@@ -29,6 +33,10 @@ class AgenticWorkflowWorkload(Workload):
         start_timestamp: float = 0.0,
         interarrival_seconds: float = 0.2,
     ):
+        if scenario not in {"react", "multi_agent", "tool_rag", "branching"}:
+            raise ValueError(
+                "scenario must be one of: react, multi_agent, tool_rag, branching"
+            )
         if num_workflows <= 0:
             raise ValueError("num_workflows must be positive")
         if num_agents <= 0:
@@ -57,15 +65,31 @@ class AgenticWorkflowWorkload(Workload):
         ):
             raise ValueError("tool_latency_distribution must be (min_ms, max_ms)")
 
+        self.scenario = scenario
         self.num_workflows = num_workflows
-        self.num_agents = num_agents
+        self.num_agents = self._scenario_num_agents(scenario, num_agents)
         self.turns_per_workflow = turns_per_workflow
         self.shared_system_prompt_ratio = shared_system_prompt_ratio
-        self.tool_call_probability = tool_call_probability
+        self.tool_call_probability = self._scenario_probability(
+            scenario,
+            "tool",
+            tool_call_probability,
+        )
         self.tool_latency_distribution = tool_latency_distribution
-        self.rag_call_probability = rag_call_probability
-        self.branching_factor = branching_factor
-        self.plan_reuse_probability = plan_reuse_probability
+        self.rag_call_probability = self._scenario_probability(
+            scenario,
+            "rag",
+            rag_call_probability,
+        )
+        self.branching_factor = self._scenario_branching_factor(
+            scenario,
+            branching_factor,
+        )
+        self.plan_reuse_probability = self._scenario_probability(
+            scenario,
+            "plan",
+            plan_reuse_probability,
+        )
         self.context_growth_per_turn = context_growth_per_turn
         self.l2_capacity_mb = l2_capacity_mb
         self.l3_latency_ms = l3_latency_ms
@@ -121,8 +145,9 @@ class AgenticWorkflowWorkload(Workload):
 
                 metadata = {
                     "workload": "agentic_workflow",
+                    "scenario": self.scenario,
                     "workflow_id": workflow_id,
-                    "workflow_type": "react",
+                    "workflow_type": self._workflow_type(),
                     "agent_id": agent_id,
                     "step_id": step_id,
                     "turn_id": turn,
@@ -182,6 +207,26 @@ class AgenticWorkflowWorkload(Workload):
     def traces(self) -> list[WorkflowTrace]:
         return list(self._last_traces)
 
+    def summary(self) -> dict[str, int | float | str]:
+        trace_count = len(self._last_traces)
+        step_count = sum(len(trace.ordered_steps) for trace in self._last_traces)
+        tool_call_count = sum(len(trace.tool_latencies) for trace in self._last_traces)
+        rag_call_count = sum(
+            1
+            for trace in self._last_traces
+            for event in trace.cache_events
+            if event.get("event") == "rag_call"
+        )
+        return {
+            "scenario": self.scenario,
+            "workflows": trace_count,
+            "steps": step_count,
+            "tool_calls": tool_call_count,
+            "rag_calls": rag_call_count,
+            "num_agents": self.num_agents,
+            "branching_factor": self.branching_factor,
+        }
+
     def _build_prompt(
         self,
         workflow_id: str,
@@ -222,10 +267,44 @@ class AgenticWorkflowWorkload(Workload):
         payload = f"{workflow_id}:{turn}:{tool_name}"
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
+    def _workflow_type(self) -> str:
+        if self.scenario == "multi_agent":
+            return "multi_agent"
+        if self.scenario == "tool_rag":
+            return "rag_agent"
+        return "react"
+
     @staticmethod
     def _validate_probability(name: str, value: float) -> None:
         if not 0.0 <= value <= 1.0:
             raise ValueError(f"{name} must be in [0, 1]")
+
+    @staticmethod
+    def _scenario_num_agents(scenario: AgenticScenario, num_agents: int) -> int:
+        if scenario == "multi_agent":
+            return max(2, num_agents)
+        return num_agents
+
+    @staticmethod
+    def _scenario_branching_factor(
+        scenario: AgenticScenario,
+        branching_factor: float,
+    ) -> float:
+        if scenario == "branching":
+            return max(2.0, branching_factor)
+        return branching_factor
+
+    @staticmethod
+    def _scenario_probability(
+        scenario: AgenticScenario,
+        probability_type: str,
+        value: float,
+    ) -> float:
+        if scenario == "tool_rag" and probability_type in {"tool", "rag"}:
+            return max(0.8, value)
+        if scenario == "branching" and probability_type == "plan":
+            return max(0.7, value)
+        return value
 
 
 _SHARED_SYSTEM_PROMPT = (

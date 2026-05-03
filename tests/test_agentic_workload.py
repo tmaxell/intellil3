@@ -1,5 +1,6 @@
 import pytest
 
+from benchmarks.runners.benchmark_runner import BenchmarkRunner, NoOpSystem
 from benchmarks.workloads import AgenticWorkflowWorkload, BenchmarkRequest
 
 
@@ -103,6 +104,55 @@ def test_agentic_workload_supports_multi_agent_and_branching_metadata() -> None:
     assert workload.traces()[0].branching_factor == 3.0
 
 
+def test_agentic_scenarios_apply_expected_presets() -> None:
+    multi_agent = AgenticWorkflowWorkload(
+        scenario="multi_agent",
+        num_agents=1,
+        num_workflows=1,
+        turns_per_workflow=2,
+    )
+    tool_rag = AgenticWorkflowWorkload(
+        scenario="tool_rag",
+        num_workflows=1,
+        turns_per_workflow=2,
+        tool_call_probability=0.1,
+        rag_call_probability=0.1,
+    )
+    branching = AgenticWorkflowWorkload(
+        scenario="branching",
+        num_workflows=1,
+        turns_per_workflow=2,
+        branching_factor=1.0,
+        plan_reuse_probability=0.1,
+    )
+
+    assert multi_agent.num_agents == 2
+    assert tool_rag.tool_call_probability == 0.8
+    assert tool_rag.rag_call_probability == 0.8
+    assert branching.branching_factor == 2.0
+    assert branching.plan_reuse_probability == 0.7
+
+
+def test_agentic_workload_summary_after_generate() -> None:
+    workload = AgenticWorkflowWorkload(
+        scenario="tool_rag",
+        num_workflows=2,
+        turns_per_workflow=3,
+        tool_call_probability=1.0,
+        rag_call_probability=1.0,
+        seed=11,
+    )
+
+    workload.generate()
+    summary = workload.summary()
+
+    assert summary["scenario"] == "tool_rag"
+    assert summary["workflows"] == 2
+    assert summary["steps"] == 6
+    assert summary["tool_calls"] == 6
+    assert summary["rag_calls"] == 6
+
+
 def test_context_growth_increases_prompt_length() -> None:
     workload = AgenticWorkflowWorkload(
         num_workflows=1,
@@ -117,10 +167,33 @@ def test_context_growth_increases_prompt_length() -> None:
     assert lengths[0] < lengths[1] < lengths[2]
 
 
+def test_benchmark_runner_can_build_agentic_workload() -> None:
+    runner = BenchmarkRunner(
+        {
+            "experiment": {"name": "agentic smoke"},
+            "workload": {
+                "type": "agentic_workflow",
+                "scenario": "react",
+                "num_workflows": 1,
+                "turns_per_workflow": 2,
+                "seed": 1,
+            },
+        },
+        systems=[NoOpSystem()],
+    )
+
+    results = runner.run()
+
+    assert len(results) == 1
+    assert results[0].workload_type == "agentic_workflow"
+    assert results[0].metrics.total_requests == 2
+
+
 @pytest.mark.parametrize(
     ("kwargs", "match"),
     [
         ({"num_workflows": 0}, "num_workflows"),
+        ({"scenario": "unknown"}, "scenario"),
         ({"num_agents": 0}, "num_agents"),
         ({"turns_per_workflow": 0}, "turns_per_workflow"),
         ({"shared_system_prompt_ratio": 1.5}, "shared_system_prompt_ratio"),
