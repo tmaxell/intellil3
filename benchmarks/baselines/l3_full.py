@@ -43,4 +43,8 @@ class FullL3System(BenchmarkSystem):
             latency_ms=latency_ms,
             is_cache_hit=result is not None,
             prefetched=prefetched,
+            extra_metrics={
+                "l3_read_count": 1.0,
+                "l3_write_count": float(prefetched),
+            },
         )

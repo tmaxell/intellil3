@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 
+from benchmarks.baselines.l3_full import FullL3System
+from benchmarks.baselines.lru_l3 import LRUL3Baseline
+from benchmarks.baselines.vanilla_s3 import VanillaS3Baseline
 from benchmarks.baselines.agentic import (
     AgentLRUBaseline,
     AgentPrefetchSystem,
@@ -20,12 +25,18 @@ from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
 from benchmarks.measurement.synthetic_systems import NoSystemBaseline, SyntheticL3System
 from benchmarks.metrics import Metrics
 from benchmarks.workloads import (
+    BenchmarkRequest,
     AgenticWorkflowWorkload,
     LongContextWorkload,
     MultiUserChatWorkload,
     RAGHeavyWorkload,
     Workload,
 )
+from l3store.core.object_store import UnifiedObjectStore
+from l3store.core.types import KVCacheBlock
+from l3store.storage import MemoryBackend, S3Backend
+from l3store.storage.backend import StorageBackend
+from l3store.utils.config import L3Config
 
 
 @dataclass(frozen=True)
@@ -55,9 +66,7 @@ class BenchmarkRunner:
         systems: list[BenchmarkSystem] | None = None,
     ):
         self.config = config
-        self.systems = (
-            systems if systems is not None else build_systems_from_config(config)
-        )
+        self._provided_systems = systems
 
     @classmethod
     def from_yaml(
@@ -70,13 +79,14 @@ class BenchmarkRunner:
 
     def run(self) -> list[BenchmarkResult]:
         workload = self._build_workload(self.config["workload"])
-        requests = workload.generate()
+        requests = self._prepare_requests(workload.generate())
         experiment = self.config.get("experiment", {})
         experiment_name = experiment.get("name", "benchmark")
         workload_type = self.config["workload"]["type"]
+        systems = self._resolve_systems(requests)
 
         results = []
-        for system in self.systems:
+        for system in systems:
             metrics = self._run_system(system, requests)
             results.append(
                 BenchmarkResult(
@@ -88,6 +98,16 @@ class BenchmarkRunner:
                 )
             )
         return results
+
+    def _resolve_systems(self, requests: list[BenchmarkRequest]) -> list[BenchmarkSystem]:
+        if self._provided_systems is not None:
+            return self._provided_systems
+        return build_systems_from_config(self.config, requests=requests)
+
+    def _prepare_requests(self, requests: list[BenchmarkRequest]) -> list[BenchmarkRequest]:
+        if not _is_real_storage_mode(self.config):
+            return requests
+        return _attach_object_ids(requests, self.config)
 
     def run_and_write(self, output_path: str | Path) -> list[BenchmarkResult]:
         results = self.run()
@@ -176,7 +196,10 @@ class NoOpSystem(BenchmarkSystem):
         return ProcessResult(latency_ms=0.01, is_cache_hit=False)
 
 
-def build_systems_from_config(config: dict[str, Any]) -> list[BenchmarkSystem]:
+def build_systems_from_config(
+    config: dict[str, Any],
+    requests: list[BenchmarkRequest] | None = None,
+) -> list[BenchmarkSystem]:
     """Build benchmark systems declared in a YAML config."""
 
     system_specs = config.get("systems", [])
@@ -184,6 +207,13 @@ def build_systems_from_config(config: dict[str, Any]) -> list[BenchmarkSystem]:
         return []
 
     workload_type = str(config.get("workload", {}).get("type", ""))
+    if _is_real_storage_mode(config):
+        return _build_real_storage_systems(
+            config=config,
+            workload_type=workload_type,
+            requests=requests,
+        )
+
     systems = []
     for spec in system_specs:
         if isinstance(spec, str):
@@ -196,6 +226,194 @@ def build_systems_from_config(config: dict[str, Any]) -> list[BenchmarkSystem]:
                 system.name = str(display_name)
         systems.append(system)
     return systems
+
+
+def _build_real_storage_systems(
+    config: dict[str, Any],
+    workload_type: str,
+    requests: list[BenchmarkRequest] | None,
+) -> list[BenchmarkSystem]:
+    if requests is None:
+        raise ValueError("real storage mode requires requests to be prepared first")
+
+    systems: list[BenchmarkSystem] = []
+    for spec in config.get("systems", []):
+        system_name: str | None = None
+        if isinstance(spec, str):
+            system_key = spec
+        else:
+            system_key = str(spec.get("type") or spec.get("name") or "")
+            if spec.get("name"):
+                system_name = str(spec["name"])
+        system = _build_real_storage_system(
+            system_key=system_key,
+            workload_type=workload_type,
+            requests=requests,
+            config=config,
+        )
+        if system_name:
+            system.name = system_name
+        systems.append(system)
+    return systems
+
+
+def _build_real_storage_system(
+    system_key: str,
+    workload_type: str,
+    requests: list[BenchmarkRequest],
+    config: dict[str, Any],
+) -> BenchmarkSystem:
+    del workload_type  # Reserved for future workload-specific real-system handling.
+    key = system_key.lower()
+    l3_config = _load_l3_config(config)
+    backend = _build_storage_backend(config, l3_config)
+    store = UnifiedObjectStore(backend=backend, config=l3_config)
+    _seed_kv_objects(store=store, requests=requests, config=config)
+
+    if key in {
+        "baseline_no_system",
+        "baseline_vanilla_s3",
+        "direct_object_storage",
+        "vanilla_s3",
+        "b0",
+    }:
+        return VanillaS3Baseline(
+            backend=backend,
+            key_prefix=l3_config.objects.kv_cache.key_prefix,
+        )
+    if key in {"agent_lru", "baseline_lru", "baseline_lru_l3", "lru_l3", "lru", "b2"}:
+        return LRUL3Baseline(store=store)
+    if key in {
+        "current_intellil3",
+        "l3_full",
+        "l3_measurement_system",
+        "prefix reuse",
+        "prefix_reuse",
+        "prefix-reuse",
+        "b1",
+    }:
+        return FullL3System(store=store)
+    raise ValueError(f"Unknown real-storage benchmark system: {system_key}")
+
+
+def _is_real_storage_mode(config: dict[str, Any]) -> bool:
+    benchmark = config.get("benchmark", {})
+    mode = str(
+        benchmark.get("execution_mode")
+        or benchmark.get("storage_mode")
+        or "synthetic"
+    ).lower()
+    return mode in {"real", "real_storage"}
+
+
+def _load_l3_config(config: dict[str, Any]) -> L3Config:
+    benchmark = config.get("benchmark", {})
+    real_storage = benchmark.get("real_storage", {})
+    config_path = str(real_storage.get("config_path", "configs/default.yaml"))
+    return L3Config.from_yaml(config_path)
+
+
+def _build_storage_backend(config: dict[str, Any], l3_config: L3Config) -> StorageBackend:
+    benchmark = config.get("benchmark", {})
+    real_storage = benchmark.get("real_storage", {})
+    backend_name = str(real_storage.get("backend", "memory")).lower()
+    if backend_name == "memory":
+        return MemoryBackend()
+    if backend_name == "s3":
+        storage = l3_config.storage
+        return S3Backend(
+            endpoint_url=storage.endpoint_url,
+            access_key=storage.access_key,
+            secret_key=storage.secret_key,
+            bucket=storage.bucket,
+            region=storage.region,
+        )
+    raise ValueError(f"Unsupported real storage backend: {backend_name}")
+
+
+def _attach_object_ids(
+    requests: list[BenchmarkRequest],
+    config: dict[str, Any],
+) -> list[BenchmarkRequest]:
+    benchmark = config.get("benchmark", {})
+    real_storage = benchmark.get("real_storage", {})
+    pool_size = int(real_storage.get("object_pool_size", 64))
+    if pool_size <= 0:
+        raise ValueError("benchmark.real_storage.object_pool_size must be positive")
+
+    prepared: list[BenchmarkRequest] = []
+    for request in requests:
+        if request.metadata.get("object_id"):
+            prepared.append(request)
+            continue
+        seed_key = _request_seed_key(request)
+        digest = hashlib.sha256(seed_key.encode("utf-8")).hexdigest()
+        slot = int(digest[:8], 16) % pool_size
+        metadata = dict(request.metadata)
+        metadata["object_id"] = f"obj_{slot:05d}"
+        prepared.append(replace(request, metadata=metadata))
+    return prepared
+
+
+def _request_seed_key(request: BenchmarkRequest) -> str:
+    topic = str(request.metadata.get("topic", ""))
+    workflow_id = str(request.metadata.get("workflow_id", ""))
+    turn_id = str(request.metadata.get("turn_id", ""))
+    return "|".join(
+        [
+            request.session_id,
+            request.model_name,
+            topic,
+            workflow_id,
+            turn_id,
+            request.prompt[:96],
+        ]
+    )
+
+
+def _seed_kv_objects(
+    store: UnifiedObjectStore,
+    requests: list[BenchmarkRequest],
+    config: dict[str, Any],
+) -> None:
+    benchmark = config.get("benchmark", {})
+    real_storage = benchmark.get("real_storage", {})
+    tokens_per_object = int(real_storage.get("kv_tokens_per_object", 16))
+    vector_size = int(real_storage.get("kv_vector_size", 16))
+    model_name = str(real_storage.get("model_name", "benchmark-model"))
+    if tokens_per_object <= 0 or vector_size <= 0:
+        raise ValueError("kv_tokens_per_object and kv_vector_size must be positive")
+
+    object_ids = sorted(
+        {
+            str(request.metadata.get("object_id", ""))
+            for request in requests
+            if request.metadata.get("object_id")
+        }
+    )
+    for index, object_id in enumerate(object_ids):
+        token_ids = [index * tokens_per_object + i for i in range(tokens_per_object)]
+        block = KVCacheBlock(
+            model_name=model_name,
+            token_ids=token_ids,
+            block_index=index,
+        )
+        block.meta.object_id = object_id
+        key_states = np.full(
+            (tokens_per_object, vector_size),
+            fill_value=float((index % 13) + 1),
+            dtype=np.float32,
+        )
+        value_states = np.full(
+            (tokens_per_object, vector_size),
+            fill_value=float((index % 17) + 1),
+            dtype=np.float32,
+        )
+        store.put_kv_block(
+            block=block,
+            key_states=key_states,
+            value_states=value_states,
+        )
 
 
 def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
