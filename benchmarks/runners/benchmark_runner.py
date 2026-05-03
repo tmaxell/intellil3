@@ -30,6 +30,7 @@ from benchmarks.workloads import (
     LongContextWorkload,
     MultiUserChatWorkload,
     RAGHeavyWorkload,
+    RetailSupportWorkflowWorkload,
     Workload,
 )
 from l3store.core.object_store import UnifiedObjectStore
@@ -184,6 +185,8 @@ class BenchmarkRunner:
             return RAGHeavyWorkload(**kwargs)
         if workload_type == "agentic_workflow":
             return AgenticWorkflowWorkload(**kwargs)
+        if workload_type == "retail_support_workflow":
+            return RetailSupportWorkflowWorkload(**kwargs)
         raise ValueError(f"Unknown workload type: {workload_type}")
 
 
