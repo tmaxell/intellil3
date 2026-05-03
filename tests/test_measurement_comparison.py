@@ -9,7 +9,11 @@ from benchmarks.measurement.run_all_comparisons import (
     render_comparison_index_csv,
     render_comparison_index_markdown,
 )
-from benchmarks.measurement.run_comparison import _parse_targets, run_comparison
+from benchmarks.measurement.run_comparison import (
+    _parse_targets,
+    _resolve_comparison_systems,
+    run_comparison,
+)
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 
@@ -167,6 +171,21 @@ systems:
         for metric in comparison.metrics
     )
     assert (tmp_path / "results" / "comparison.csv").exists()
+
+
+def test_resolve_comparison_systems_uses_last_candidate() -> None:
+    baseline, candidate = _resolve_comparison_systems(
+        {
+            "baseline_vanilla_s3": {},
+            "baseline_lru_l3": {},
+            "l3_full": {},
+        },
+        baseline_system=None,
+        candidate_system=None,
+    )
+
+    assert baseline == "baseline_vanilla_s3"
+    assert candidate == "l3_full"
 
 
 def _summary() -> MeasurementSummary:
