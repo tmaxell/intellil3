@@ -123,7 +123,16 @@ AGENTIC_KEY_METRICS = [
     "l3_write_count",
 ]
 
-KEY_METRICS = CORE_KEY_METRICS + AGENTIC_KEY_METRICS
+RAG_KEY_METRICS = [
+    "evidence_recall",
+    "evidence_precision",
+    "answer_correctness",
+    "groundedness",
+    "abstention_correctness",
+    "rag_task_success",
+]
+
+KEY_METRICS = CORE_KEY_METRICS + AGENTIC_KEY_METRICS + RAG_KEY_METRICS
 
 
 def direction_for(metric_name: str) -> str:
