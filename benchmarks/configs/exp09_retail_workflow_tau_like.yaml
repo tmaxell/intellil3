@@ -1,0 +1,28 @@
+experiment:
+  name: "Retail Workflow Tau-Like"
+  description: "Deterministic retail support workflow benchmark with policy-aware tool execution"
+
+workload:
+  type: "retail_support_workflow"
+  tasks_path: "benchmarks/data/retail_workflow/tasks.json"
+  num_workflows: 24
+  turns_per_workflow: 4
+  seed: 46
+  interarrival_seconds: 0.2
+
+systems:
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "agentic_active_l3"
+    type: "agentic_active_l3"
+
+metrics:
+  - workflow_correctness_rate
+  - policy_violation_rate
+  - tool_use_accuracy
+  - fallback_success_rate
+  - milestone_pass_rate
+  - tool_arg_error_count
+  - latency_p95_ms
+  - cache_hit_rate
+  - prefetch_use_rate
