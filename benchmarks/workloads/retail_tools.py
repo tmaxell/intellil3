@@ -168,6 +168,10 @@ class RetailToolKit:
     def return_requests(self) -> list[dict[str, Any]]:
         return list(self._return_requests)
 
+    def reset_runtime_state(self) -> None:
+        self._refund_actions = []
+        self._return_requests = []
+
     def _within_return_window(self, delivered_at: str) -> bool:
         if not delivered_at:
             return False
