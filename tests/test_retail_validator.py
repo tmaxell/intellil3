@@ -67,3 +67,75 @@ def test_validator_reports_mismatch() -> None:
     assert verdict["task_success"] is False
     assert verdict["matched_outcome"] == "none"
     assert "outcome_mismatch" in verdict["errors"]
+
+
+def test_milestone_validation_checks_tool_sequence_and_args() -> None:
+    validator = RetailEndStateValidator()
+    task = validator.task("TASK-001")
+    state = RetailWorkflowState(RetailToolKit())
+    state.apply_step("get_order", {"order_id": "ORD-1001"})
+    state.apply_step("search_policy", {"policy_key": "rules"})
+    state.apply_step(
+        "calculate_refund",
+        {"order_id": "ORD-1001", "item_id": "ITEM-1001-1", "quantity": 1},
+    )
+    state.apply_step(
+        "submit_refund",
+        {
+            "order_id": "ORD-1001",
+            "item_id": "ITEM-1001-1",
+            "amount": 120.0,
+            "reason_code": "within_return_window",
+        },
+    )
+
+    milestones = validator.validate_milestones(task, state.history())
+
+    assert milestones["milestone_pass_rate"] == 1.0
+    assert milestones["tool_arg_error_count"] == 0
+    assert milestones["policy_violation"] is False
+
+
+def test_milestone_validation_detects_policy_violation() -> None:
+    validator = RetailEndStateValidator()
+    task = validator.task("TASK-001")
+    state = RetailWorkflowState(RetailToolKit())
+    state.apply_step(
+        "submit_refund",
+        {
+            "order_id": "ORD-1001",
+            "item_id": "ITEM-1001-1",
+            "amount": 120.0,
+            "reason_code": "within_return_window",
+        },
+    )
+
+    milestones = validator.validate_milestones(task, state.history())
+
+    assert milestones["policy_violation"] is True
+    assert "submit_without_calculate" in milestones["errors"]
+
+
+def test_score_task_returns_required_d3_fields() -> None:
+    validator = RetailEndStateValidator()
+    task = validator.task("TASK-005")
+    state = RetailWorkflowState(RetailToolKit())
+    state.apply_step("get_order", {"order_id": "ORD-1002"})
+    state.apply_step("search_policy", {"policy_key": "rules"})
+    state.apply_step(
+        "update_return_request",
+        {
+            "order_id": "ORD-1002",
+            "item_id": "ITEM-1002-1",
+            "status": "offer_refund_or_store_credit",
+            "note": "exchange_fallback",
+        },
+    )
+
+    score = validator.score_task(task, state.snapshot(), state.history())
+
+    assert score["task_success"] is True
+    assert score["policy_violation"] is False
+    assert score["tool_arg_error_count"] == 0
+    assert score["fallback_success"] is True
+    assert 0.0 <= score["milestone_pass_rate"] <= 1.0
