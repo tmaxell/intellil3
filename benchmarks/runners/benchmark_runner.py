@@ -30,6 +30,7 @@ from benchmarks.workloads import (
     LongContextWorkload,
     MultiUserChatWorkload,
     RAGHeavyWorkload,
+    RealisticRAGWorkload,
     RetailSupportWorkflowWorkload,
     Workload,
 )
@@ -187,6 +188,8 @@ class BenchmarkRunner:
             return AgenticWorkflowWorkload(**kwargs)
         if workload_type == "retail_support_workflow":
             return RetailSupportWorkflowWorkload(**kwargs)
+        if workload_type == "rag_realistic":
+            return RealisticRAGWorkload(**kwargs)
         raise ValueError(f"Unknown workload type: {workload_type}")
 
 
