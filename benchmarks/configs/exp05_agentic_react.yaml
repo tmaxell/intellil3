@@ -1,0 +1,33 @@
+experiment:
+  name: "Agentic ReAct Workflow"
+  description: "Synthetic single-agent ReAct loop for TTL/pinning and tool-call pauses"
+
+workload:
+  type: "agentic_workflow"
+  scenario: "react"
+  num_workflows: 50
+  num_agents: 1
+  turns_per_workflow: 6
+  shared_system_prompt_ratio: 0.8
+  tool_call_probability: 0.7
+  tool_latency_distribution: [100.0, 1000.0]
+  rag_call_probability: 0.3
+  branching_factor: 1.0
+  plan_reuse_probability: 0.4
+  context_growth_per_turn: 128
+  l2_capacity_mb: 512
+  l3_latency_ms: 120.0
+  seed: 42
+
+systems:
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "agentic_active_l3"
+    type: "agentic_active_l3"
+
+metrics:
+  - job_completion_time_p95
+  - step_latency_p95
+  - kv_reload_count
+  - tool_wait_hidden_ms
+  - workflow_cache_hit_rate

@@ -4,7 +4,17 @@ import io
 
 import numpy as np
 
-from l3store.core.types import KVCacheBlock, ObjectMeta, RAGObject, SemanticCacheEntry
+from l3store.core.types import (
+    AgentStep,
+    AgentWorkflow,
+    KVCacheBlock,
+    ObjectMeta,
+    PlanCacheEntry,
+    RAGObject,
+    SemanticCacheEntry,
+    ToolCallArtifact,
+    WorkflowTrace,
+)
 
 
 class Serializer:
@@ -63,3 +73,51 @@ class Serializer:
     @staticmethod
     def deserialize_semantic_entry(data: bytes) -> SemanticCacheEntry:
         return SemanticCacheEntry.model_validate_json(data)
+
+    @staticmethod
+    def serialize_agent_workflow(workflow: AgentWorkflow) -> bytes:
+        return workflow.model_dump_json(indent=2).encode("utf-8")
+
+    @staticmethod
+    def deserialize_agent_workflow(data: bytes) -> AgentWorkflow:
+        return AgentWorkflow.model_validate_json(data)
+
+    @staticmethod
+    def serialize_agent_step(step: AgentStep) -> bytes:
+        return step.model_dump_json(indent=2).encode("utf-8")
+
+    @staticmethod
+    def deserialize_agent_step(data: bytes) -> AgentStep:
+        return AgentStep.model_validate_json(data)
+
+    @staticmethod
+    def serialize_tool_artifact(artifact: ToolCallArtifact) -> bytes:
+        return artifact.model_dump_json(indent=2).encode("utf-8")
+
+    @staticmethod
+    def deserialize_tool_artifact(data: bytes) -> ToolCallArtifact:
+        return ToolCallArtifact.model_validate_json(data)
+
+    @staticmethod
+    def serialize_plan_cache_entry(entry: PlanCacheEntry) -> bytes:
+        return entry.model_dump_json(indent=2).encode("utf-8")
+
+    @staticmethod
+    def deserialize_plan_cache_entry(data: bytes) -> PlanCacheEntry:
+        return PlanCacheEntry.model_validate_json(data)
+
+    @staticmethod
+    def serialize_plan_embedding(embedding: np.ndarray) -> bytes:
+        return Serializer.serialize_embedding(embedding)
+
+    @staticmethod
+    def deserialize_plan_embedding(data: bytes) -> np.ndarray:
+        return Serializer.deserialize_embedding(data)
+
+    @staticmethod
+    def serialize_workflow_trace(trace: WorkflowTrace) -> bytes:
+        return trace.model_dump_json(indent=2).encode("utf-8")
+
+    @staticmethod
+    def deserialize_workflow_trace(data: bytes) -> WorkflowTrace:
+        return WorkflowTrace.model_validate_json(data)

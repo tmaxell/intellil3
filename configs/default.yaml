@@ -14,3 +14,9 @@ objects:
     key_prefix: "rag/"
   semantic_cache:
     key_prefix: "sem/"
+  agent:
+    workflows_prefix: "agent/workflows/"
+    steps_prefix: "agent/steps/"
+    tools_prefix: "agent/tools/"
+    plans_prefix: "agent/plans/"
+    traces_prefix: "agent/traces/"

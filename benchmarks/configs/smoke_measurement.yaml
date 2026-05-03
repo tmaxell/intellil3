@@ -1,0 +1,17 @@
+experiment:
+  name: "Smoke Measurement"
+  description: "Small deterministic workload for validating measurement artifacts"
+
+workload:
+  type: "multi_user_chat"
+  num_users: 2
+  requests_per_user: 3
+  shared_system_prompt: "You are a helpful assistant."
+  seed: 7
+
+systems:
+  - name: "noop"
+
+output:
+  results_path: "benchmarks/results/smoke_measurement/results.json"
+  report_path: "benchmarks/results/smoke_measurement/report.md"
