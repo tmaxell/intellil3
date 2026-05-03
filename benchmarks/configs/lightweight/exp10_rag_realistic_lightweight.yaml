@@ -1,0 +1,30 @@
+experiment:
+  name: "Realistic RAG (Lightweight)"
+  description: "Lightweight evidence-grounded RAG benchmark for fast CI validation"
+
+workload:
+  type: "rag_realistic"
+  data_dir: "benchmarks/data/rag_realistic"
+  num_queries: 10
+  retrieval_top_k: 3
+  noise_level: 0.3
+  version_preference: "latest"
+  retrieval_mode: "baseline"
+  seed: 42
+  interarrival_seconds: 0.25
+
+systems:
+  - name: "rag_realistic_baseline"
+    type: "rag_realistic_baseline"
+  - name: "rag_realistic_enhanced"
+    type: "rag_realistic_enhanced"
+
+metrics:
+  - evidence_recall
+  - evidence_precision
+  - answer_correctness
+  - groundedness
+  - abstention_correctness
+  - rag_task_success
+  - latency_p95_ms
+  - cache_hit_rate
