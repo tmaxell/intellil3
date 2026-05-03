@@ -10,15 +10,14 @@ from benchmarks.measurement.comparison import (
     render_comparison_report,
 )
 from benchmarks.measurement.run_measurement import MeasurementSuite
-from benchmarks.measurement.synthetic_systems import NoSystemBaseline, SyntheticL3System
 
 
 def run_comparison(
     config_path: str | Path,
     output_dir: str | Path,
     repetitions: int = 5,
-    baseline_system: str = NoSystemBaseline.name,
-    candidate_system: str = SyntheticL3System.name,
+    baseline_system: str | None = None,
+    candidate_system: str | None = None,
     targets: dict[str, float] | None = None,
 ):
     output_path = Path(output_dir)
@@ -26,9 +25,13 @@ def run_comparison(
         config_path=config_path,
         output_dir=output_path,
         repetitions=repetitions,
-        system_factory=lambda: [NoSystemBaseline(), SyntheticL3System()],
     )
     summary = suite.run()
+    baseline_system, candidate_system = _resolve_comparison_systems(
+        summary.systems,
+        baseline_system,
+        candidate_system,
+    )
     comparison = compare_systems(
         summary,
         baseline_system,
@@ -56,8 +59,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--config", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--repetitions", type=int, default=5)
-    parser.add_argument("--baseline-system", default=NoSystemBaseline.name)
-    parser.add_argument("--candidate-system", default=SyntheticL3System.name)
+    parser.add_argument("--baseline-system")
+    parser.add_argument("--candidate-system")
     parser.add_argument(
         "--target",
         action="append",
@@ -91,6 +94,26 @@ def _parse_targets(values: list[str]) -> dict[str, float]:
             raise ValueError(f"Invalid target metric in override: {value!r}")
         targets[metric] = float(percent)
     return targets
+
+
+def _resolve_comparison_systems(
+    systems: dict[str, object],
+    baseline_system: str | None,
+    candidate_system: str | None,
+) -> tuple[str, str]:
+    system_names = list(systems)
+    if baseline_system is None:
+        if not system_names:
+            raise ValueError("Cannot infer baseline system: no systems were measured")
+        baseline_system = system_names[0]
+    if candidate_system is None:
+        if len(system_names) < 2:
+            raise ValueError("Cannot infer candidate system: fewer than two systems")
+        candidate_system = next(
+            (name for name in system_names if name != baseline_system),
+            system_names[1],
+        )
+    return baseline_system, candidate_system
 
 
 if __name__ == "__main__":

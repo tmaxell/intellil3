@@ -27,6 +27,32 @@ HIGHER_IS_BETTER = {
     "pass_at_k",
 }
 
+AGENTIC_METRICS = {
+    "job_completion_time_p50",
+    "job_completion_time_p95",
+    "job_completion_time_p99",
+    "step_latency_p50",
+    "step_latency_p95",
+    "ttft_per_step",
+    "kv_reload_count",
+    "kv_recompute_count",
+    "recompute_avoided",
+    "tool_wait_hidden_ms",
+    "workflow_cache_hit_rate",
+    "tool_cache_hit_rate",
+    "plan_cache_hit_rate",
+    "prefetch_precision",
+    "prefetch_recall",
+    "wasted_prefetch_bytes",
+    "latency_saved_ms",
+    "l2_eviction_count",
+    "l3_read_count",
+    "l3_write_count",
+    "task_success_proxy",
+    "plan_validation_fail_rate",
+    "pass_at_k",
+}
+
 NEUTRAL_METRICS = {
     "total_requests",
 }
@@ -50,6 +76,11 @@ DEFAULT_TARGETS = {
     "throughput_req_s": 50.0,
     "cache_hit_rate": 30.0,
     "prefetch_use_rate": 60.0,
+    "workflow_cache_hit_rate": 60.0,
+    "tool_cache_hit_rate": 60.0,
+    "plan_cache_hit_rate": 60.0,
+    "prefetch_precision": 60.0,
+    "prefetch_recall": 60.0,
 }
 
 
@@ -68,10 +99,12 @@ class MetricComparison:
     target_percent: float | None
     target_mode: str | None
     meets_target: bool | None
+    metric_group: str
 
     def as_dict(self) -> dict[str, bool | float | str | None]:
         return {
             "metric": self.metric,
+            "metric_group": self.metric_group,
             "baseline_mean": self.baseline_mean,
             "baseline_std": self.baseline_std,
             "candidate_mean": self.candidate_mean,
@@ -118,7 +151,7 @@ def compare_systems(
 
     baseline_metrics = summary.systems[baseline_system]
     candidate_metrics = summary.systems[candidate_system]
-    metric_names = sorted(set(baseline_metrics) & set(candidate_metrics))
+    metric_names = sorted(set(baseline_metrics) | set(candidate_metrics))
     resolved_targets = dict(DEFAULT_TARGETS)
     if targets is not None:
         resolved_targets.update(targets)
@@ -126,8 +159,8 @@ def compare_systems(
     comparisons = [
         _compare_metric(
             metric_name,
-            baseline_metrics[metric_name],
-            candidate_metrics[metric_name],
+            baseline_metrics.get(metric_name, _zero_metric()),
+            candidate_metrics.get(metric_name, _zero_metric()),
             resolved_targets.get(metric_name),
         )
         for metric_name in metric_names
@@ -149,13 +182,14 @@ def render_comparison_report(comparison: SystemComparison) -> str:
         f"- Baseline: `{comparison.baseline_system}`",
         f"- Candidate: `{comparison.candidate_system}`",
         "",
-        "| Metric | Baseline mean +/- std | Candidate mean +/- std | Delta | Improvement | Target | Status |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | :---: |",
+        "| Group | Metric | Baseline mean +/- std | Candidate mean +/- std | Delta | Improvement | Target | Status |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | :---: |",
     ]
 
     for metric in comparison.metrics:
         lines.append(
             "| "
+            f"{metric.metric_group} | "
             f"{metric.metric} | "
             f"{metric.baseline_mean:.6f} +/- {metric.baseline_std:.6f} | "
             f"{metric.candidate_mean:.6f} +/- {metric.candidate_std:.6f} | "
@@ -174,6 +208,7 @@ def render_comparison_csv(comparison: SystemComparison) -> str:
         buffer,
         fieldnames=[
             "metric",
+            "metric_group",
             "direction",
             "baseline_mean",
             "baseline_std",
@@ -236,7 +271,17 @@ def _compare_metric(
             target_improvement_percent,
             target_mode,
         ),
+        metric_group=_metric_group_for(metric_name),
     )
+
+
+def _zero_metric() -> dict[str, float]:
+    return {
+        "mean": 0.0,
+        "std": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+    }
 
 
 def _format_percent(value: float | None) -> str:
@@ -265,6 +310,12 @@ def _direction_for(metric_name: str) -> str:
     if metric_name in HIGHER_IS_BETTER:
         return "higher_is_better"
     return "lower_is_better"
+
+
+def _metric_group_for(metric_name: str) -> str:
+    if metric_name in AGENTIC_METRICS:
+        return "agentic"
+    return "core"
 
 
 def _target_mode_for(

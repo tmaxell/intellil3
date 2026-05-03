@@ -10,7 +10,7 @@ from benchmarks.measurement.comparison import SystemComparison
 from benchmarks.measurement.run_comparison import _parse_targets, run_comparison
 
 
-KEY_METRICS = [
+CORE_KEY_METRICS = [
     "latency_p50_ms",
     "latency_p95_ms",
     "latency_p99_ms",
@@ -18,6 +18,25 @@ KEY_METRICS = [
     "cache_hit_rate",
     "prefetch_use_rate",
 ]
+
+AGENTIC_KEY_METRICS = [
+    "workflow_cache_hit_rate",
+    "tool_cache_hit_rate",
+    "plan_cache_hit_rate",
+    "prefetch_precision",
+    "prefetch_recall",
+    "kv_reload_count",
+    "kv_recompute_count",
+    "recompute_avoided",
+    "tool_wait_hidden_ms",
+    "latency_saved_ms",
+    "wasted_prefetch_bytes",
+    "l2_eviction_count",
+    "l3_read_count",
+    "l3_write_count",
+]
+
+KEY_METRICS = CORE_KEY_METRICS + AGENTIC_KEY_METRICS
 
 
 def run_all_comparisons(
@@ -62,6 +81,7 @@ def render_comparison_index_csv(comparisons: list[SystemComparison]) -> str:
         fieldnames=[
             "experiment_name",
             "metric",
+            "metric_group",
             "baseline_mean",
             "candidate_mean",
             "improvement_percent",
@@ -79,6 +99,7 @@ def render_comparison_index_csv(comparisons: list[SystemComparison]) -> str:
                 {
                     "experiment_name": comparison.experiment_name,
                     "metric": metric.metric,
+                    "metric_group": metric.metric_group,
                     "baseline_mean": metric.baseline_mean,
                     "candidate_mean": metric.candidate_mean,
                     "improvement_percent": metric.improvement_percent,
@@ -94,8 +115,8 @@ def render_comparison_index_markdown(comparisons: list[SystemComparison]) -> str
     lines = [
         "# Benchmark Comparison Index",
         "",
-        "| Experiment | Metric | Baseline | Candidate | Improvement | Target | Status |",
-        "| --- | --- | ---: | ---: | ---: | ---: | :---: |",
+        "| Experiment | Group | Metric | Baseline | Candidate | Improvement | Target | Status |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | :---: |",
     ]
     for comparison in comparisons:
         for metric in comparison.metrics:
@@ -104,6 +125,7 @@ def render_comparison_index_markdown(comparisons: list[SystemComparison]) -> str
             lines.append(
                 "| "
                 f"{comparison.experiment_name} | "
+                f"{metric.metric_group} | "
                 f"{metric.metric} | "
                 f"{metric.baseline_mean:.6f} | "
                 f"{metric.candidate_mean:.6f} | "
