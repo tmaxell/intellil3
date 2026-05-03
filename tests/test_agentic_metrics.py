@@ -59,6 +59,10 @@ def test_benchmark_runner_aggregates_agentic_extra_metrics() -> None:
     assert "workflow_cache_hit_rate" in full_metrics
     assert 0.0 <= full_metrics["workflow_cache_hit_rate"] <= 1.0
     assert "wasted_prefetch_bytes" in full_metrics
+    assert full_metrics["job_completion_time_p95"] > 0.0
+    assert full_metrics["step_latency_p95"] > 0.0
+    assert full_metrics["ttft_per_step"] > 0.0
+    assert "network_io_overhead" in full_metrics
 
 
 def test_full_agentic_system_reports_prefetch_rates() -> None:

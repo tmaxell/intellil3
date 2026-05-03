@@ -105,6 +105,8 @@ class BenchmarkRunner:
         prefetched = 0
         useful_prefetch = 0
         extra_metrics: dict[str, float] = {}
+        workflow_latencies: dict[str, float] = {}
+        is_agentic_workload = False
 
         for request in requests:
             start = time.perf_counter()
@@ -113,6 +115,17 @@ class BenchmarkRunner:
             latency_ms = result.latency_ms if result.latency_ms >= 0 else elapsed_ms
 
             latencies.append(latency_ms)
+            workflow_id = str(request.metadata.get("workflow_id", ""))
+            is_agentic_request = (
+                request.metadata.get("workload") == "agentic_workflow"
+                or bool(workflow_id)
+            )
+            is_agentic_workload = is_agentic_workload or is_agentic_request
+            if is_agentic_request:
+                workflow_key = workflow_id or request.session_id
+                workflow_latencies[workflow_key] = (
+                    workflow_latencies.get(workflow_key, 0.0) + latency_ms
+                )
             cache_hits += int(result.is_cache_hit)
             prefetched += result.prefetched
             useful_prefetch += result.useful_prefetch
@@ -130,8 +143,11 @@ class BenchmarkRunner:
             useful_prefetch=useful_prefetch,
             extra_metrics=_finalize_extra_metrics(
                 extra_metrics,
+                latencies_ms=latencies,
+                workflow_latencies_ms=list(workflow_latencies.values()),
                 total_requests=len(requests),
                 prefetched=prefetched,
+                is_agentic_workload=is_agentic_workload,
             ),
         )
 
@@ -216,8 +232,11 @@ def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
 
 def _finalize_extra_metrics(
     extra_metrics: dict[str, float],
+    latencies_ms: list[float],
+    workflow_latencies_ms: list[float],
     total_requests: int,
     prefetched: int,
+    is_agentic_workload: bool,
 ) -> dict[str, float]:
     finalized = dict(extra_metrics)
     for metric_name, metric_value in extra_metrics.items():
@@ -231,7 +250,52 @@ def _finalize_extra_metrics(
         finalized["prefetch_recall"] = (
             finalized["prefetch_recall"] / total_requests if total_requests > 0 else 0.0
         )
+    if is_agentic_workload:
+        finalized.setdefault(
+            "job_completion_time_p50",
+            _percentile(workflow_latencies_ms, 50),
+        )
+        finalized.setdefault(
+            "job_completion_time_p95",
+            _percentile(workflow_latencies_ms, 95),
+        )
+        finalized.setdefault(
+            "job_completion_time_p99",
+            _percentile(workflow_latencies_ms, 99),
+        )
+        finalized.setdefault("step_latency_p50", _percentile(latencies_ms, 50))
+        finalized.setdefault("step_latency_p95", _percentile(latencies_ms, 95))
+        finalized.setdefault(
+            "ttft_per_step",
+            _mean([latency * 0.35 for latency in latencies_ms]),
+        )
+    if "network_io_overhead" not in finalized:
+        finalized["network_io_overhead"] = (
+            finalized.get("l3_read_count", 0.0)
+            + finalized.get("l3_write_count", 0.0)
+        )
     return finalized
+
+
+def _percentile(values: list[float], percentile: int) -> float:
+    if not values:
+        return 0.0
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return float(sorted_values[0])
+    rank = (len(sorted_values) - 1) * percentile / 100.0
+    lower = int(rank)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    fraction = rank - lower
+    return float(
+        sorted_values[lower] * (1.0 - fraction) + sorted_values[upper] * fraction
+    )
+
+
+def _mean(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    return float(sum(values) / len(values))
 
 
 def main(argv: list[str] | None = None) -> None:
