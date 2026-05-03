@@ -1,0 +1,44 @@
+[
+  {
+    "sku": "KB-001",
+    "name": "Mechanical Keyboard",
+    "category": "electronics",
+    "exchangeable": true,
+    "active": true
+  },
+  {
+    "sku": "SN-003",
+    "name": "Smart Speaker Mini",
+    "category": "electronics",
+    "exchangeable": false,
+    "active": false
+  },
+  {
+    "sku": "TS-002",
+    "name": "Graphic T-Shirt",
+    "category": "apparel",
+    "exchangeable": true,
+    "active": true
+  },
+  {
+    "sku": "MUG-010",
+    "name": "Ceramic Mug",
+    "category": "home",
+    "exchangeable": true,
+    "active": true
+  },
+  {
+    "sku": "HP-004",
+    "name": "Wireless Headphones",
+    "category": "electronics",
+    "exchangeable": true,
+    "active": true
+  },
+  {
+    "sku": "SH-020",
+    "name": "Running Shoes",
+    "category": "apparel",
+    "exchangeable": true,
+    "active": true
+  }
+]

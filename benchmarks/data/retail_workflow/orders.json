@@ -1,0 +1,47 @@
+[
+  {
+    "order_id": "ORD-1001",
+    "user_id": "USR-001",
+    "status": "delivered",
+    "payment_method": "card",
+    "refund_method": "card",
+    "delivered_at": "2026-01-10",
+    "currency": "USD"
+  },
+  {
+    "order_id": "ORD-1002",
+    "user_id": "USR-002",
+    "status": "delivered",
+    "payment_method": "gift_card",
+    "refund_method": "store_credit",
+    "delivered_at": "2025-10-01",
+    "currency": "USD"
+  },
+  {
+    "order_id": "ORD-1003",
+    "user_id": "USR-003",
+    "status": "delivered",
+    "payment_method": "card",
+    "refund_method": "card",
+    "delivered_at": "2026-01-15",
+    "currency": "USD"
+  },
+  {
+    "order_id": "ORD-1004",
+    "user_id": "USR-004",
+    "status": "processing",
+    "payment_method": "card",
+    "refund_method": "card",
+    "delivered_at": "",
+    "currency": "USD"
+  },
+  {
+    "order_id": "ORD-1005",
+    "user_id": "USR-005",
+    "status": "delivered",
+    "payment_method": "paypal",
+    "refund_method": "paypal",
+    "delivered_at": "2026-01-20",
+    "currency": "USD"
+  }
+]

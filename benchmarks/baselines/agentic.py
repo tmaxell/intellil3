@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
+from benchmarks.baselines.retail_workflow_metrics import RetailWorkflowMetricsTracker
 from benchmarks.workloads.base import BenchmarkRequest
 
 
@@ -25,6 +26,7 @@ class AgentLRUBaseline(BenchmarkSystem):
             raise ValueError("l2_capacity_steps must be positive")
         self._capacity = l2_capacity_steps
         self._recent_steps: list[str] = []
+        self._retail_metrics = RetailWorkflowMetricsTracker(profile="baseline")
 
     def process(self, request: BenchmarkRequest) -> ProcessResult:
         workflow_id = str(request.metadata.get("workflow_id", ""))
@@ -32,15 +34,18 @@ class AgentLRUBaseline(BenchmarkSystem):
         is_hit = cache_key in self._recent_steps
         evicted = self._touch(cache_key)
 
+        extra_metrics = {
+            "kv_reload_count": int(not is_hit),
+            "kv_recompute_count": int(not is_hit),
+            "l2_eviction_count": int(evicted),
+            "l3_read_count": int(not is_hit),
+        }
+        extra_metrics.update(self._retail_metrics.metrics_for_request(request))
+
         return ProcessResult(
             latency_ms=_agent_latency(request, base_ms=145.0, cache_hit=is_hit),
             is_cache_hit=is_hit,
-            extra_metrics={
-                "kv_reload_count": int(not is_hit),
-                "kv_recompute_count": int(not is_hit),
-                "l2_eviction_count": int(evicted),
-                "l3_read_count": int(not is_hit),
-            },
+            extra_metrics=extra_metrics,
         )
 
     def _touch(self, key: str) -> bool:
@@ -148,6 +153,7 @@ class FullAgenticL3System(BenchmarkSystem):
         self._seen_tools: set[str] = set()
         self._seen_plans: set[str] = set()
         self._processed_steps: set[str] = set()
+        self._retail_metrics = RetailWorkflowMetricsTracker(profile="candidate")
 
     def process(self, request: BenchmarkRequest) -> ProcessResult:
         step_id = str(request.metadata.get("step_id", ""))
@@ -166,6 +172,23 @@ class FullAgenticL3System(BenchmarkSystem):
             self._seen_plans.add(plan_id)
         self._processed_steps.add(step_id)
 
+        extra_metrics = {
+            "workflow_cache_hit_rate": int(prefetch_hit),
+            "tool_cache_hit_rate": int(tool_hit),
+            "plan_cache_hit_rate": int(plan_hit),
+            "recompute_avoided": int(cache_hit),
+            "kv_reload_count": int(not cache_hit),
+            "l3_read_count": int(not cache_hit),
+            "l3_write_count": int(not cache_hit),
+            "prefetch_precision": int(prefetch_hit),
+            "prefetch_recall": int(prefetch_hit),
+            "latency_saved_ms": 35.0 if prefetch_hit else 0.0,
+            "wasted_prefetch_bytes": (
+                0.0 if prefetch_hit or not prefetched else _prefetch_bytes(request)
+            ),
+        }
+        extra_metrics.update(self._retail_metrics.metrics_for_request(request))
+
         return ProcessResult(
             latency_ms=_agent_latency(
                 request,
@@ -176,21 +199,7 @@ class FullAgenticL3System(BenchmarkSystem):
             is_cache_hit=cache_hit,
             prefetched=int(prefetched),
             useful_prefetch=int(prefetch_hit),
-            extra_metrics={
-                "workflow_cache_hit_rate": int(prefetch_hit),
-                "tool_cache_hit_rate": int(tool_hit),
-                "plan_cache_hit_rate": int(plan_hit),
-                "recompute_avoided": int(cache_hit),
-                "kv_reload_count": int(not cache_hit),
-                "l3_read_count": int(not cache_hit),
-                "l3_write_count": int(not cache_hit),
-                "prefetch_precision": int(prefetch_hit),
-                "prefetch_recall": int(prefetch_hit),
-                "latency_saved_ms": 35.0 if prefetch_hit else 0.0,
-                "wasted_prefetch_bytes": (
-                    0.0 if prefetch_hit or not prefetched else _prefetch_bytes(request)
-                ),
-            },
+            extra_metrics=extra_metrics,
         )
 
 
