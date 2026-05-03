@@ -64,6 +64,8 @@ def test_render_comparison_outputs_status_columns() -> None:
     assert "Group" in markdown
     assert "latency_p95_ms" in csv_text
     assert "metric_group" in csv_text
+    assert "effect_size" in csv_text
+    assert "p_value" in csv_text
     assert "meets_target" in csv_text
 
 
@@ -177,6 +179,7 @@ def _summary() -> MeasurementSummary:
                     "std": 10.0,
                     "min": 190.0,
                     "max": 210.0,
+                    "samples": [200.0, 210.0, 190.0],
                 },
                 "throughput_req_s": {
                     "mean": 50.0,
@@ -197,6 +200,7 @@ def _summary() -> MeasurementSummary:
                     "std": 5.0,
                     "min": 95.0,
                     "max": 105.0,
+                    "samples": [100.0, 105.0, 95.0],
                 },
                 "throughput_req_s": {
                     "mean": 100.0,

@@ -3,9 +3,12 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from io import StringIO
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from benchmarks.measurement.run_measurement import MeasurementSummary
+
+if TYPE_CHECKING:
+    from benchmarks.analysis.statistical import StatisticalMetric
 
 
 HIGHER_IS_BETTER = {
@@ -100,6 +103,13 @@ class MetricComparison:
     target_mode: str | None
     meets_target: bool | None
     metric_group: str
+    baseline_ci_low: float | None = None
+    baseline_ci_high: float | None = None
+    candidate_ci_low: float | None = None
+    candidate_ci_high: float | None = None
+    effect_size: float | None = None
+    p_value: float | None = None
+    is_significant: bool | None = None
 
     def as_dict(self) -> dict[str, bool | float | str | None]:
         return {
@@ -115,6 +125,13 @@ class MetricComparison:
             "target_percent": self.target_percent,
             "target_mode": self.target_mode,
             "meets_target": self.meets_target,
+            "baseline_ci_low": self.baseline_ci_low,
+            "baseline_ci_high": self.baseline_ci_high,
+            "candidate_ci_low": self.candidate_ci_low,
+            "candidate_ci_high": self.candidate_ci_high,
+            "effect_size": self.effect_size,
+            "p_value": self.p_value,
+            "is_significant": self.is_significant,
         }
 
 
@@ -156,15 +173,22 @@ def compare_systems(
     if targets is not None:
         resolved_targets.update(targets)
 
-    comparisons = [
-        _compare_metric(
-            metric_name,
-            baseline_metrics.get(metric_name, _zero_metric()),
-            candidate_metrics.get(metric_name, _zero_metric()),
-            resolved_targets.get(metric_name),
+    statistical = _statistical_by_metric(
+        summary,
+        baseline_system,
+        candidate_system,
+    )
+    comparisons = []
+    for metric_name in metric_names:
+        comparisons.append(
+            _compare_metric(
+                metric_name,
+                baseline_metrics.get(metric_name, _zero_metric()),
+                candidate_metrics.get(metric_name, _zero_metric()),
+                resolved_targets.get(metric_name),
+                statistical.get(metric_name),
+            )
         )
-        for metric_name in metric_names
-    ]
 
     return SystemComparison(
         experiment_name=summary.experiment_name,
@@ -182,8 +206,8 @@ def render_comparison_report(comparison: SystemComparison) -> str:
         f"- Baseline: `{comparison.baseline_system}`",
         f"- Candidate: `{comparison.candidate_system}`",
         "",
-        "| Group | Metric | Baseline mean +/- std | Candidate mean +/- std | Delta | Improvement | Target | Status |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | :---: |",
+        "| Group | Metric | Baseline mean +/- std | Candidate mean +/- std | Delta | Improvement | Effect | p-value | Target | Status |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
     ]
 
     for metric in comparison.metrics:
@@ -195,6 +219,8 @@ def render_comparison_report(comparison: SystemComparison) -> str:
             f"{metric.candidate_mean:.6f} +/- {metric.candidate_std:.6f} | "
             f"{metric.delta:.6f} | "
             f"{_format_percent(metric.improvement_percent)} | "
+            f"{_format_float(metric.effect_size)} | "
+            f"{_format_float(metric.p_value)} | "
             f"{_format_target(metric)} | "
             f"{_format_status(metric.meets_target)} |"
         )
@@ -219,6 +245,13 @@ def render_comparison_csv(comparison: SystemComparison) -> str:
             "target_percent",
             "target_mode",
             "meets_target",
+            "baseline_ci_low",
+            "baseline_ci_high",
+            "candidate_ci_low",
+            "candidate_ci_high",
+            "effect_size",
+            "p_value",
+            "is_significant",
         ],
     )
     writer.writeheader()
@@ -232,6 +265,7 @@ def _compare_metric(
     baseline_values: dict[str, float],
     candidate_values: dict[str, float],
     target_improvement_percent: float | None,
+    statistical: "StatisticalMetric | None" = None,
 ) -> MetricComparison:
     direction = _direction_for(metric_name)
     baseline_mean = baseline_values["mean"]
@@ -272,7 +306,33 @@ def _compare_metric(
             target_mode,
         ),
         metric_group=_metric_group_for(metric_name),
+        baseline_ci_low=None if statistical is None else statistical.baseline_ci_low,
+        baseline_ci_high=None if statistical is None else statistical.baseline_ci_high,
+        candidate_ci_low=None if statistical is None else statistical.candidate_ci_low,
+        candidate_ci_high=None if statistical is None else statistical.candidate_ci_high,
+        effect_size=None if statistical is None else statistical.effect_size,
+        p_value=None if statistical is None else statistical.p_value,
+        is_significant=None if statistical is None else statistical.is_significant,
     )
+
+
+def _statistical_by_metric(
+    summary: MeasurementSummary,
+    baseline_system: str,
+    candidate_system: str,
+) -> dict[str, "StatisticalMetric"]:
+    try:
+        from benchmarks.analysis.statistical import compare_summary_statistics
+    except ImportError:
+        return {}
+    return {
+        metric.metric: metric
+        for metric in compare_summary_statistics(
+            summary,
+            baseline_system,
+            candidate_system,
+        )
+    }
 
 
 def _zero_metric() -> dict[str, float]:
@@ -288,6 +348,12 @@ def _format_percent(value: float | None) -> str:
     if value is None:
         return "n/a"
     return f"{value:.2f}%"
+
+
+def _format_float(value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.6f}"
 
 
 def _format_status(value: bool | None) -> str:

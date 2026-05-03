@@ -168,6 +168,7 @@ def _aggregate(values: list[float]) -> dict[str, float]:
         "std": float(np.std(array)),
         "min": float(np.min(array)),
         "max": float(np.max(array)),
+        "samples": [float(value) for value in values],
     }
 
 
