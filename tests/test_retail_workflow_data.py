@@ -69,3 +69,26 @@ def test_order_item_product_references_are_consistent() -> None:
         requested_item = task["input"].get("requested_item_id")
         if requested_item is not None:
             assert requested_item in item_ids
+
+
+def test_required_tools_are_from_supported_toolset() -> None:
+    tasks = _load("tasks.json")
+    supported_tools = {
+        "get_order",
+        "search_policy",
+        "calculate_refund",
+        "submit_refund",
+        "update_return_request",
+    }
+    for task in tasks:
+        for tool_name in task["required_tools"]:
+            assert tool_name in supported_tools
+
+
+def test_policies_have_required_keys() -> None:
+    policies = _load("policies.json")
+    assert "policy_version" in policies
+    assert "rules" in policies
+    assert "fallbacks" in policies
+    assert "return_window_days" in policies["rules"]
+    assert isinstance(policies["rules"]["supported_refund_methods"], list)

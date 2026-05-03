@@ -3,6 +3,7 @@ from __future__ import annotations
 from benchmarks.workloads.retail_state import RetailWorkflowState
 from benchmarks.workloads.retail_tools import RetailToolKit
 from benchmarks.workloads.retail_validator import RetailEndStateValidator
+import pytest
 
 
 def test_validator_accepts_expected_refund_outcome() -> None:
@@ -139,3 +140,25 @@ def test_score_task_returns_required_d3_fields() -> None:
     assert score["tool_arg_error_count"] == 0
     assert score["fallback_success"] is True
     assert 0.0 <= score["milestone_pass_rate"] <= 1.0
+
+
+def test_validator_rejects_unknown_task_id() -> None:
+    validator = RetailEndStateValidator()
+    with pytest.raises(ValueError, match="unknown task_id"):
+        validator.task("TASK-404")
+
+
+def test_milestone_validation_detects_argument_mismatch() -> None:
+    validator = RetailEndStateValidator()
+    task = validator.task("TASK-001")
+    state = RetailWorkflowState(RetailToolKit())
+    state.apply_step("get_order", {"order_id": "ORD-1002"})
+    state.apply_step(
+        "calculate_refund",
+        {"order_id": "ORD-1002", "item_id": "ITEM-1002-1", "quantity": 1},
+    )
+
+    milestones = validator.validate_milestones(task, state.history())
+
+    assert milestones["tool_arg_error_count"] > 0
+    assert "order_id_mismatch" in milestones["errors"]

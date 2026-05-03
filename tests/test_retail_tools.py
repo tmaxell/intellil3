@@ -78,3 +78,43 @@ def test_execute_dispatches_tools() -> None:
 
     assert result["ok"] is True
     assert result["data"]["policy"]["return_window_days"] == 30
+
+
+def test_execute_reports_unknown_tool() -> None:
+    tools = RetailToolKit()
+    result = tools.execute("nonexistent_tool", {})
+
+    assert result["ok"] is False
+    assert result["error"].startswith("unknown_tool:")
+
+
+def test_search_policy_rejects_unknown_key() -> None:
+    tools = RetailToolKit()
+    result = tools.search_policy("missing_policy_section")
+
+    assert result["ok"] is False
+    assert result["error"] == "policy_key_not_found"
+
+
+def test_calculate_refund_rejects_invalid_quantity() -> None:
+    tools = RetailToolKit()
+    result = tools.calculate_refund(
+        order_id="ORD-1001",
+        item_id="ITEM-1001-1",
+        quantity=0,
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "invalid_quantity"
+
+
+def test_update_return_request_requires_status() -> None:
+    tools = RetailToolKit()
+    result = tools.update_return_request(
+        order_id="ORD-1002",
+        item_id="ITEM-1002-1",
+        status="",
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "missing_status"
