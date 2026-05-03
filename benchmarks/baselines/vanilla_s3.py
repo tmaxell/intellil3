@@ -27,4 +27,8 @@ class VanillaS3Baseline(BenchmarkSystem):
         return ProcessResult(
             latency_ms=latency_ms,
             is_cache_hit=data is not None,
+            extra_metrics={
+                "l3_read_count": 1.0,
+                "l3_write_count": 0.0,
+            },
         )
