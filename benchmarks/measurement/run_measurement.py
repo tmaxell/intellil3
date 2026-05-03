@@ -126,12 +126,12 @@ class MeasurementSuite:
         )
         report_path.write_text(render_measurement_report(summary), encoding="utf-8")
 
-    def _build_systems(self) -> list[BenchmarkSystem]:
+    def _build_systems(self) -> list[BenchmarkSystem] | None:
         if self.system_factory is not None:
             return self.system_factory()
         if self.systems is not None:
             return self.systems
-        return [NoOpSystem()] if self.noop else []
+        return [NoOpSystem()] if self.noop else None
 
 
 def render_measurement_report(summary: MeasurementSummary) -> str:

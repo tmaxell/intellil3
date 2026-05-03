@@ -6,6 +6,7 @@ from benchmarks.baselines.agentic import (
     WorkflowAwareEvictionSystem,
     build_agentic_systems,
 )
+from benchmarks.measurement.run_measurement import MeasurementSuite
 from benchmarks.runners.benchmark_runner import BenchmarkRunner
 from benchmarks.workloads import AgenticWorkflowWorkload
 
@@ -140,3 +141,62 @@ def test_benchmark_runner_executes_agentic_systems() -> None:
         "full_agentic_l3",
     }
     assert all(result.metrics.total_requests == 6 for result in results)
+
+
+def test_benchmark_runner_builds_agentic_systems_from_config() -> None:
+    config = {
+        "experiment": {"name": "Agentic config systems"},
+        "workload": {
+            "type": "agentic_workflow",
+            "scenario": "multi_agent",
+            "num_workflows": 1,
+            "num_agents": 2,
+            "turns_per_workflow": 4,
+            "seed": 6,
+        },
+        "systems": [
+            {"name": "baseline_lru", "type": "lru_l3"},
+            {"name": "workflow_aware", "type": "workflow_aware_l3"},
+            {"name": "full_agentic_active_l3", "type": "agentic_active_l3"},
+        ],
+    }
+
+    results = BenchmarkRunner(config).run()
+
+    assert [result.system_name for result in results] == [
+        "baseline_lru",
+        "workflow_aware",
+        "full_agentic_active_l3",
+    ]
+    assert results[0].metrics.total_requests == 4
+
+
+def test_measurement_suite_uses_configured_systems(tmp_path) -> None:
+    config_path = tmp_path / "agentic.yaml"
+    config_path.write_text(
+        """
+experiment:
+  name: "Agentic measurement config"
+workload:
+  type: "agentic_workflow"
+  scenario: "react"
+  num_workflows: 1
+  turns_per_workflow: 2
+  seed: 8
+systems:
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "agentic_active_l3"
+    type: "agentic_active_l3"
+""",
+        encoding="utf-8",
+    )
+
+    summary = MeasurementSuite(
+        config_path=config_path,
+        output_dir=tmp_path / "results",
+        repetitions=1,
+    ).run()
+
+    assert set(summary.systems) == {"baseline_lru", "agentic_active_l3"}
+    assert summary.systems["baseline_lru"]["total_requests"]["mean"] == 2.0

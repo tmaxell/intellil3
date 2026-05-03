@@ -9,7 +9,15 @@ from typing import Any
 
 import yaml
 
+from benchmarks.baselines.agentic import (
+    AgentLRUBaseline,
+    AgentPrefetchSystem,
+    AgentTTLSystem,
+    FullAgenticL3System,
+    WorkflowAwareEvictionSystem,
+)
 from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
+from benchmarks.measurement.synthetic_systems import NoSystemBaseline, SyntheticL3System
 from benchmarks.metrics import Metrics
 from benchmarks.workloads import (
     AgenticWorkflowWorkload,
@@ -47,7 +55,9 @@ class BenchmarkRunner:
         systems: list[BenchmarkSystem] | None = None,
     ):
         self.config = config
-        self.systems = systems or []
+        self.systems = (
+            systems if systems is not None else build_systems_from_config(config)
+        )
 
     @classmethod
     def from_yaml(
@@ -139,6 +149,60 @@ class NoOpSystem(BenchmarkSystem):
         return ProcessResult(latency_ms=0.01, is_cache_hit=False)
 
 
+def build_systems_from_config(config: dict[str, Any]) -> list[BenchmarkSystem]:
+    """Build benchmark systems declared in a YAML config."""
+
+    system_specs = config.get("systems", [])
+    if not system_specs:
+        return []
+
+    workload_type = str(config.get("workload", {}).get("type", ""))
+    systems = []
+    for spec in system_specs:
+        if isinstance(spec, str):
+            system = _build_system(spec, workload_type)
+        else:
+            system_key = str(spec.get("type") or spec.get("name") or "")
+            system = _build_system(system_key, workload_type)
+            display_name = spec.get("name")
+            if display_name:
+                system.name = str(display_name)
+        systems.append(system)
+    return systems
+
+
+def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
+    key = system_key.lower()
+
+    if key in {"noop"}:
+        return NoOpSystem()
+    if key in {"baseline_no_system", "direct_object_storage", "vanilla_s3", "b0"}:
+        return NoSystemBaseline()
+    if key in {"current_intellil3", "l3_full", "l3_measurement_system", "b1"}:
+        return SyntheticL3System()
+    if key in {"agent_lru", "baseline_lru", "lru_l3", "lru", "b2"}:
+        if workload_type == "agentic_workflow":
+            return AgentLRUBaseline()
+        return NoSystemBaseline()
+    if key in {"agent_ttl", "agent_ttl_only", "b3"}:
+        return AgentTTLSystem()
+    if key in {"workflow_aware_eviction", "workflow_aware_l3", "workflow_aware", "b4"}:
+        return WorkflowAwareEvictionSystem()
+    if key in {"agent_prefetch", "agent_aware_prefetch", "b5"}:
+        return AgentPrefetchSystem()
+    if key in {
+        "full_agentic_l3",
+        "full_agentic_active_l3",
+        "agentic_active_l3",
+        "agentic_tool_cache",
+        "tool_cache",
+        "b6",
+    }:
+        return FullAgenticL3System()
+
+    raise ValueError(f"Unknown benchmark system: {system_key}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -150,7 +214,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    systems = [NoOpSystem()] if args.noop else []
+    systems = [NoOpSystem()] if args.noop else None
     runner = BenchmarkRunner.from_yaml(args.config, systems=systems)
     runner.run_and_write(args.output)
 
