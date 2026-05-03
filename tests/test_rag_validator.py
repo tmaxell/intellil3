@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from benchmarks.workloads.base import BenchmarkRequest
 from benchmarks.workloads.rag_validator import RAGValidationResult, RAGValidator, _is_abstention, _key_terms
 
 
@@ -350,3 +351,149 @@ def test_is_abstention_recognises_signals() -> None:
 def test_validator_rejects_invalid_thresholds(kwargs, match) -> None:
     with pytest.raises(ValueError, match=match):
         RAGValidator(**kwargs)
+
+
+# ---------------------------------------------------------------------------
+# score_request() — D2: task-level score from BenchmarkRequest
+# ---------------------------------------------------------------------------
+
+_PASSAGE_TEXTS = {
+    "P001": "The cache service stores frequently accessed data in memory and falls back to object storage when cache misses happen.",
+    "P002": "The cache service stores hot data in memory and falls back to object storage on cache misses to reduce latency.",
+    "P003": "Prefetch is enabled for repeated sessions and can reduce p95 latency when requests share semantic similarity.",
+}
+
+_SCORE_KEYS = {
+    "rag_task_success", "evidence_recall", "evidence_precision",
+    "answer_correctness", "groundedness", "abstention_correctness",
+}
+
+
+def _make_request(
+    *,
+    gold: str = "P001",
+    retrieved: str = "P001,P002",
+    answerable: int = 1,
+    expected_answer: str = "object storage is used on cache miss",
+    question_type: str = "single_hop",
+) -> BenchmarkRequest:
+    return BenchmarkRequest(
+        prompt="test",
+        session_id="s0",
+        timestamp=0.0,
+        metadata={
+            "workload": "rag_realistic",
+            "query_id": "Q001",
+            "domain": "cloud_docs",
+            "question_type": question_type,
+            "answerable": answerable,
+            "expected_answer": expected_answer,
+            "gold_evidence_ids": gold,
+            "retrieved_passage_ids": retrieved,
+            "retrieval_top_k": 2,
+            "retrieval_mode": "baseline",
+            "topic": "cloud_docs",
+        },
+    )
+
+
+def test_score_request_returns_all_required_keys() -> None:
+    v = RAGValidator()
+    request = _make_request()
+    score = v.score_request(request, "object storage is used on cache miss", _PASSAGE_TEXTS)
+    assert set(score.keys()) == _SCORE_KEYS
+
+
+def test_score_request_scores_in_valid_range() -> None:
+    v = RAGValidator()
+    request = _make_request()
+    score = v.score_request(request, "object storage is used on cache miss", _PASSAGE_TEXTS)
+    for key in ("evidence_recall", "evidence_precision", "answer_correctness", "groundedness", "abstention_correctness"):
+        assert 0.0 <= score[key] <= 1.0, f"{key}={score[key]} out of range"
+
+
+def test_score_request_perfect_score() -> None:
+    v = RAGValidator()
+    request = _make_request(gold="P001", retrieved="P001", expected_answer="object storage cache miss")
+    score = v.score_request(request, "object storage cache miss", _PASSAGE_TEXTS)
+    assert score["evidence_recall"] == pytest.approx(1.0)
+    assert score["rag_task_success"] is True
+
+
+def test_score_request_unanswerable_correct_abstention() -> None:
+    v = RAGValidator()
+    request = _make_request(
+        gold="",
+        retrieved="P001",
+        answerable=0,
+        expected_answer="insufficient_evidence",
+    )
+    score = v.score_request(request, "insufficient_evidence", _PASSAGE_TEXTS)
+    assert score["abstention_correctness"] == 1.0
+    assert score["rag_task_success"] is True
+
+
+def test_score_request_unanswerable_wrong_answer() -> None:
+    v = RAGValidator()
+    request = _make_request(
+        gold="",
+        retrieved="P001",
+        answerable=0,
+        expected_answer="insufficient_evidence",
+    )
+    score = v.score_request(request, "object storage is the answer", _PASSAGE_TEXTS)
+    assert score["abstention_correctness"] == 0.0
+    assert score["rag_task_success"] is False
+
+
+def test_score_request_parses_comma_separated_ids() -> None:
+    v = RAGValidator()
+    request = _make_request(gold="P001,P002", retrieved="P001,P002,P003")
+    score = v.score_request(request, "cache miss object storage", _PASSAGE_TEXTS)
+    assert score["evidence_recall"] == pytest.approx(1.0)
+    assert score["evidence_precision"] == pytest.approx(2 / 3)
+
+
+def test_score_request_missing_passage_text_does_not_crash() -> None:
+    v = RAGValidator()
+    request = _make_request(retrieved="P001,P999")  # P999 not in texts
+    score = v.score_request(request, "object storage cache miss", _PASSAGE_TEXTS)
+    assert set(score.keys()) == _SCORE_KEYS
+
+
+def test_score_request_empty_gold_and_retrieved() -> None:
+    v = RAGValidator()
+    request = _make_request(gold="", retrieved="", answerable=0, expected_answer="insufficient_evidence")
+    score = v.score_request(request, "insufficient_evidence", _PASSAGE_TEXTS)
+    assert score["evidence_recall"] == 1.0  # vacuously true
+    assert score["evidence_precision"] == 0.0  # no retrieved
+    assert score["rag_task_success"] is True
+
+
+def test_score_request_from_realistic_workload_request() -> None:
+    """End-to-end: score a request generated by RealisticRAGWorkload."""
+    from benchmarks.workloads.rag_realistic import RealisticRAGWorkload
+
+    workload = RealisticRAGWorkload(
+        data_dir="benchmarks/data/rag_realistic",
+        num_queries=5,
+        noise_level=0.0,
+        retrieval_top_k=3,
+    )
+    requests = workload.generate()
+    corpus = workload._passages_by_id
+    passage_texts = {pid: p["text"] for pid, p in corpus.items()}
+
+    v = RAGValidator()
+    for request in requests:
+        answerable = bool(request.metadata["answerable"])
+        generated = (
+            str(request.metadata["expected_answer"])
+            if answerable
+            else "insufficient_evidence"
+        )
+        score = v.score_request(request, generated, passage_texts)
+        assert set(score.keys()) == _SCORE_KEYS
+        for key in ("evidence_recall", "evidence_precision", "answer_correctness",
+                    "groundedness", "abstention_correctness"):
+            assert 0.0 <= score[key] <= 1.0

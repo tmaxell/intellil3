@@ -85,6 +85,7 @@ def test_realistic_rag_workload_metadata_has_all_required_fields() -> None:
 
     required_keys = {
         "workload", "query_id", "domain", "question_type", "answerable",
+        "expected_answer",
         "gold_evidence_ids",
         "retrieved_passage_ids", "retrieval_top_k", "retrieval_mode",
         "topic",
@@ -96,6 +97,8 @@ def test_realistic_rag_workload_metadata_has_all_required_fields() -> None:
         assert request.metadata["answerable"] in {0, 1}
         assert isinstance(request.metadata["retrieval_top_k"], int)
         assert request.metadata["retrieval_mode"] in {"baseline", "enhanced"}
+        assert isinstance(request.metadata["expected_answer"], str)
+        assert request.metadata["expected_answer"] != ""
 
 
 def test_retrieved_passage_ids_are_valid_corpus_ids() -> None:

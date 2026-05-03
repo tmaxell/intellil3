@@ -75,6 +75,7 @@ class RealisticRAGWorkload(Workload):
                 "domain": query["domain"],
                 "question_type": query["question_type"],
                 "answerable": int(query["answerable"]),
+                "expected_answer": query["expected_answer"],
                 "gold_evidence_ids": ",".join(gold_ids),
                 "retrieved_passage_ids": ",".join(retrieval.retrieved_passage_ids),
                 "retrieval_top_k": retrieval.retrieval_top_k,

@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from benchmarks.workloads.base import BenchmarkRequest
 
 
 _ABSTENTION_SIGNALS = frozenset(
@@ -118,6 +122,43 @@ class RAGValidator:
             abstention_correctness=abstention_correctness,
             rag_task_success=rag_task_success,
         )
+
+    def score_request(
+        self,
+        request: "BenchmarkRequest",
+        generated_answer: str,
+        passage_texts: dict[str, str],
+    ) -> dict[str, float | bool]:
+        """Produce a task-level score dict from a BenchmarkRequest.
+
+        Parses all required fields from request.metadata so callers do not
+        need to know the internal data format.  passage_texts maps
+        passage_id → raw text and is used for groundedness scoring.
+
+        Returns a dict with exactly these keys:
+          rag_task_success, evidence_recall, evidence_precision,
+          answer_correctness, groundedness, abstention_correctness.
+        """
+        meta = request.metadata
+
+        def _ids(key: str) -> list[str]:
+            raw = str(meta.get(key, ""))
+            return [pid for pid in raw.split(",") if pid]
+
+        gold_ids = _ids("gold_evidence_ids")
+        retrieved_ids = _ids("retrieved_passage_ids")
+        answerable = bool(meta.get("answerable", 1))
+        expected_answer = str(meta.get("expected_answer", ""))
+        retrieved_texts = [passage_texts[pid] for pid in retrieved_ids if pid in passage_texts]
+
+        return self.validate(
+            gold_evidence_ids=gold_ids,
+            retrieved_passage_ids=retrieved_ids,
+            retrieved_passage_texts=retrieved_texts,
+            expected_answer=expected_answer,
+            generated_answer=generated_answer,
+            answerable=answerable,
+        ).as_dict()
 
     # ------------------------------------------------------------------
     # Individual metric methods (public for granular testing)
