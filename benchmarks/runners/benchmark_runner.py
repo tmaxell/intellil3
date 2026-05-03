@@ -22,7 +22,12 @@ from benchmarks.baselines.agentic import (
     WorkflowAwareEvictionSystem,
 )
 from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
-from benchmarks.measurement.synthetic_systems import NoSystemBaseline, SyntheticL3System
+from benchmarks.measurement.synthetic_systems import (
+    NoSystemBaseline,
+    RAGBaselineSystem,
+    RAGEnhancedSystem,
+    SyntheticL3System,
+)
 from benchmarks.metrics import Metrics
 from benchmarks.workloads import (
     BenchmarkRequest,
@@ -458,6 +463,10 @@ def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
         "b6",
     }:
         return FullAgenticL3System()
+    if key in {"rag_realistic_baseline", "rag_baseline", "b7"}:
+        return RAGBaselineSystem()
+    if key in {"rag_realistic_enhanced", "rag_enhanced", "b8"}:
+        return RAGEnhancedSystem()
 
     raise ValueError(f"Unknown benchmark system: {system_key}")
 
@@ -506,7 +515,28 @@ def _finalize_extra_metrics(
             finalized.get("l3_read_count", 0.0)
             + finalized.get("l3_write_count", 0.0)
         )
+    _average_rag_metrics(finalized, total_requests)
     return finalized
+
+
+_RAG_AVERAGED_METRICS = frozenset(
+    {
+        "evidence_recall",
+        "evidence_precision",
+        "answer_correctness",
+        "groundedness",
+        "abstention_correctness",
+        "rag_task_success",
+    }
+)
+
+
+def _average_rag_metrics(metrics: dict[str, float], total_requests: int) -> None:
+    if total_requests <= 0:
+        return
+    for name in _RAG_AVERAGED_METRICS:
+        if name in metrics:
+            metrics[name] = metrics[name] / total_requests
 
 
 def _percentile(values: list[float], percentile: int) -> float:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 
 from benchmarks.baselines.base import BenchmarkSystem, ProcessResult
+from benchmarks.baselines.rag_realistic_metrics import RAGMetricsTracker
 from benchmarks.workloads.base import BenchmarkRequest
 
 
@@ -60,6 +61,80 @@ class SyntheticL3System(BenchmarkSystem):
             prefetched=prefetched,
             useful_prefetch=useful_prefetch,
         )
+
+
+class RAGBaselineSystem(BenchmarkSystem):
+    """Synthetic RAG baseline: high noise retrieval, no abstention on unanswerable queries."""
+
+    name = "rag_realistic_baseline"
+
+    def __init__(self, data_dir: str = "benchmarks/data/rag_realistic"):
+        self._rag_metrics = RAGMetricsTracker(data_dir=data_dir)
+
+    def process(self, request: BenchmarkRequest) -> ProcessResult:
+        generated = _simulate_answer(request, quality="baseline")
+        extra_metrics: dict[str, float | int] = {}
+        extra_metrics.update(self._rag_metrics.metrics_for_request(request, generated))
+
+        prompt_factor = min(len(request.prompt) / 4096.0, 8.0)
+        latency_ms = 175.0 + 20.0 * prompt_factor + _stable_jitter(request, "rag_base", 25.0)
+        return ProcessResult(
+            latency_ms=latency_ms,
+            is_cache_hit=False,
+            extra_metrics=extra_metrics,
+        )
+
+
+class RAGEnhancedSystem(BenchmarkSystem):
+    """Synthetic RAG candidate: low noise retrieval, correct abstention on unanswerable queries."""
+
+    name = "rag_realistic_enhanced"
+
+    def __init__(self, data_dir: str = "benchmarks/data/rag_realistic"):
+        self._rag_metrics = RAGMetricsTracker(data_dir=data_dir)
+        self._seen_topics: set[str] = set()
+
+    def process(self, request: BenchmarkRequest) -> ProcessResult:
+        generated = _simulate_answer(request, quality="enhanced")
+        topic = str(request.metadata.get("topic", "unknown"))
+        is_cache_hit = topic in self._seen_topics
+        self._seen_topics.add(topic)
+
+        extra_metrics: dict[str, float | int] = {}
+        extra_metrics.update(self._rag_metrics.metrics_for_request(request, generated))
+
+        prompt_factor = min(len(request.prompt) / 4096.0, 8.0)
+        hit_discount = 0.55 if is_cache_hit else 1.0
+        latency_ms = (
+            85.0 + 12.0 * prompt_factor * hit_discount
+            + _stable_jitter(request, "rag_enh", 8.0)
+        )
+        return ProcessResult(
+            latency_ms=latency_ms,
+            is_cache_hit=is_cache_hit,
+            extra_metrics=extra_metrics,
+        )
+
+
+def _simulate_answer(request: BenchmarkRequest, quality: str) -> str:
+    """Deterministically simulate a generated answer for benchmark scoring purposes."""
+    answerable = bool(request.metadata.get("answerable", 1))
+    expected = str(request.metadata.get("expected_answer", ""))
+
+    if not answerable:
+        # Enhanced correctly abstains; baseline gives a wrong concrete answer.
+        if quality == "enhanced":
+            return "insufficient_evidence"
+        # Use a stable, non-abstaining phrase derived from the session id.
+        return f"Based on available context for session {request.session_id}."
+
+    if quality == "enhanced":
+        return expected
+
+    # Baseline: return every other word — reduces answer_correctness score.
+    words = expected.split()
+    degraded = " ".join(words[::2])
+    return degraded if degraded else expected
 
 
 def _stable_jitter(

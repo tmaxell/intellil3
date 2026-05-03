@@ -17,6 +17,13 @@ HIGHER_IS_BETTER = {
     "latency_saved_ms",
     "task_success_proxy",
     "pass_at_k",
+    # RAG quality metrics
+    "evidence_recall",
+    "evidence_precision",
+    "answer_correctness",
+    "groundedness",
+    "abstention_correctness",
+    "rag_task_success",
 }
 
 AGENTIC_METRICS = {
@@ -45,6 +52,15 @@ AGENTIC_METRICS = {
     "pass_at_k",
 }
 
+RAG_METRICS = {
+    "evidence_recall",
+    "evidence_precision",
+    "answer_correctness",
+    "groundedness",
+    "abstention_correctness",
+    "rag_task_success",
+}
+
 NEUTRAL_METRICS = {
     "total_requests",
 }
@@ -59,6 +75,12 @@ ABSOLUTE_PERCENT_TARGETS = {
     "prefetch_recall",
     "task_success_proxy",
     "pass_at_k",
+    "evidence_recall",
+    "evidence_precision",
+    "answer_correctness",
+    "groundedness",
+    "abstention_correctness",
+    "rag_task_success",
 }
 
 DEFAULT_TARGETS = {
@@ -113,6 +135,8 @@ def direction_for(metric_name: str) -> str:
 
 
 def metric_group_for(metric_name: str) -> str:
+    if metric_name in RAG_METRICS:
+        return "rag"
     if metric_name in AGENTIC_METRICS:
         return "agentic"
     return "core"
