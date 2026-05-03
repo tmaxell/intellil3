@@ -2,6 +2,7 @@ from benchmarks.analysis.statistical import (
     compare_metric_samples,
     compare_summary_statistics,
 )
+from benchmarks.measurement.metric_catalog import direction_for, metric_group_for
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 
@@ -51,3 +52,10 @@ def test_compare_summary_statistics_uses_repetition_samples() -> None:
     assert latency.metric == "latency_p95_ms"
     assert latency.improvement_percent == 50.0
     assert latency.baseline_ci_low < latency.baseline_ci_high
+
+
+def test_metric_catalog_classifies_agentic_metrics() -> None:
+    assert direction_for("workflow_cache_hit_rate") == "higher_is_better"
+    assert direction_for("kv_reload_count") == "lower_is_better"
+    assert metric_group_for("workflow_cache_hit_rate") == "agentic"
+    assert metric_group_for("latency_p95_ms") == "core"

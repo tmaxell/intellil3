@@ -62,6 +62,8 @@ def test_render_comparison_outputs_status_columns() -> None:
 
     assert "Status" in markdown
     assert "Group" in markdown
+    assert "Summary" in markdown
+    assert "Improved metrics" in markdown
     assert "latency_p95_ms" in csv_text
     assert "metric_group" in csv_text
     assert "effect_size" in csv_text

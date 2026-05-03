@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from benchmarks.metrics import Metrics
-from benchmarks.measurement.comparison import _direction_for
+from benchmarks.measurement.metric_catalog import direction_for
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 
@@ -129,7 +129,7 @@ def compare_metric_samples(
     candidate_values = np.asarray(candidate_samples, dtype=np.float64)
     baseline_mean = _mean(baseline_values)
     candidate_mean = _mean(candidate_values)
-    direction = _direction_for(metric_name)
+    direction = direction_for(metric_name)
 
     improvement = _improvement_percent(
         baseline_mean,

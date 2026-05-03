@@ -186,6 +186,7 @@ class FullAgenticL3System(BenchmarkSystem):
                 "l3_write_count": int(not cache_hit),
                 "prefetch_precision": int(prefetch_hit),
                 "prefetch_recall": int(prefetch_hit),
+                "latency_saved_ms": 35.0 if prefetch_hit else 0.0,
                 "wasted_prefetch_bytes": (
                     0.0 if prefetch_hit or not prefetched else _prefetch_bytes(request)
                 ),

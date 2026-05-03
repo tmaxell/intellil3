@@ -5,86 +5,16 @@ from dataclasses import dataclass
 from io import StringIO
 from typing import TYPE_CHECKING, Any
 
+from benchmarks.measurement.metric_catalog import (
+    DEFAULT_TARGETS,
+    direction_for,
+    metric_group_for,
+    target_mode_for,
+)
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 if TYPE_CHECKING:
     from benchmarks.analysis.statistical import StatisticalMetric
-
-
-HIGHER_IS_BETTER = {
-    "cache_hit_rate",
-    "prefetch_use_rate",
-    "throughput_req_s",
-    "cache_hits",
-    "prefetched",
-    "useful_prefetch",
-    "recompute_avoided",
-    "tool_wait_hidden_ms",
-    "workflow_cache_hit_rate",
-    "tool_cache_hit_rate",
-    "plan_cache_hit_rate",
-    "prefetch_precision",
-    "prefetch_recall",
-    "latency_saved_ms",
-    "task_success_proxy",
-    "pass_at_k",
-}
-
-AGENTIC_METRICS = {
-    "job_completion_time_p50",
-    "job_completion_time_p95",
-    "job_completion_time_p99",
-    "step_latency_p50",
-    "step_latency_p95",
-    "ttft_per_step",
-    "kv_reload_count",
-    "kv_recompute_count",
-    "recompute_avoided",
-    "tool_wait_hidden_ms",
-    "workflow_cache_hit_rate",
-    "tool_cache_hit_rate",
-    "plan_cache_hit_rate",
-    "prefetch_precision",
-    "prefetch_recall",
-    "wasted_prefetch_bytes",
-    "latency_saved_ms",
-    "l2_eviction_count",
-    "l3_read_count",
-    "l3_write_count",
-    "task_success_proxy",
-    "plan_validation_fail_rate",
-    "pass_at_k",
-}
-
-NEUTRAL_METRICS = {
-    "total_requests",
-}
-
-ABSOLUTE_PERCENT_TARGETS = {
-    "cache_hit_rate",
-    "prefetch_use_rate",
-    "workflow_cache_hit_rate",
-    "tool_cache_hit_rate",
-    "plan_cache_hit_rate",
-    "prefetch_precision",
-    "prefetch_recall",
-    "task_success_proxy",
-    "pass_at_k",
-}
-
-DEFAULT_TARGETS = {
-    "latency_p50_ms": 30.0,
-    "latency_p95_ms": 30.0,
-    "latency_p99_ms": 30.0,
-    "throughput_req_s": 50.0,
-    "cache_hit_rate": 30.0,
-    "prefetch_use_rate": 60.0,
-    "workflow_cache_hit_rate": 60.0,
-    "tool_cache_hit_rate": 60.0,
-    "plan_cache_hit_rate": 60.0,
-    "prefetch_precision": 60.0,
-    "prefetch_recall": 60.0,
-}
 
 
 @dataclass(frozen=True)
@@ -206,9 +136,23 @@ def render_comparison_report(comparison: SystemComparison) -> str:
         f"- Baseline: `{comparison.baseline_system}`",
         f"- Candidate: `{comparison.candidate_system}`",
         "",
+        "## Summary",
+        "",
+    ]
+    lines.extend(_render_summary_lines(comparison))
+    lines.extend(
+        [
+            "",
+            "## Metrics",
+            "",
+        ]
+    )
+    lines.extend(
+        [
         "| Group | Metric | Baseline mean +/- std | Candidate mean +/- std | Delta | Improvement | Effect | p-value | Target | Status |",
         "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |",
-    ]
+        ]
+    )
 
     for metric in comparison.metrics:
         lines.append(
@@ -226,6 +170,34 @@ def render_comparison_report(comparison: SystemComparison) -> str:
         )
 
     return "\n".join(lines) + "\n"
+
+
+def _render_summary_lines(comparison: SystemComparison) -> list[str]:
+    improved = [
+        metric.metric
+        for metric in comparison.metrics
+        if metric.improvement_percent is not None and metric.improvement_percent > 0
+    ]
+    regressed = [
+        metric.metric
+        for metric in comparison.metrics
+        if metric.improvement_percent is not None and metric.improvement_percent < 0
+    ]
+    target_checks = [
+        metric for metric in comparison.metrics if metric.meets_target is not None
+    ]
+    passed_targets = [metric for metric in target_checks if metric.meets_target]
+    significant = [
+        metric.metric for metric in comparison.metrics if metric.is_significant
+    ]
+
+    return [
+        f"- Improved metrics: {len(improved)} ({_format_metric_list(improved)})",
+        f"- Regressed metrics: {len(regressed)} ({_format_metric_list(regressed)})",
+        f"- Target checks passed: {len(passed_targets)}/{len(target_checks)}",
+        "- Statistically significant metrics: "
+        f"{len(significant)} ({_format_metric_list(significant)})",
+    ]
 
 
 def render_comparison_csv(comparison: SystemComparison) -> str:
@@ -267,7 +239,7 @@ def _compare_metric(
     target_improvement_percent: float | None,
     statistical: "StatisticalMetric | None" = None,
 ) -> MetricComparison:
-    direction = _direction_for(metric_name)
+    direction = direction_for(metric_name)
     baseline_mean = baseline_values["mean"]
     baseline_std = baseline_values["std"]
     candidate_mean = candidate_values["mean"]
@@ -305,7 +277,7 @@ def _compare_metric(
             target_improvement_percent,
             target_mode,
         ),
-        metric_group=_metric_group_for(metric_name),
+        metric_group=metric_group_for(metric_name),
         baseline_ci_low=None if statistical is None else statistical.baseline_ci_low,
         baseline_ci_high=None if statistical is None else statistical.baseline_ci_high,
         candidate_ci_low=None if statistical is None else statistical.candidate_ci_low,
@@ -356,6 +328,16 @@ def _format_float(value: float | None) -> str:
     return f"{value:.6f}"
 
 
+def _format_metric_list(metrics: list[str], limit: int = 5) -> str:
+    if not metrics:
+        return "none"
+    shown = ", ".join(metrics[:limit])
+    remaining = len(metrics) - limit
+    if remaining > 0:
+        return f"{shown}, +{remaining} more"
+    return shown
+
+
 def _format_status(value: bool | None) -> str:
     if value is None:
         return "n/a"
@@ -370,29 +352,11 @@ def _format_target(metric: MetricComparison) -> str:
     return f"+{metric.target_percent:.2f}%"
 
 
-def _direction_for(metric_name: str) -> str:
-    if metric_name in NEUTRAL_METRICS:
-        return "neutral"
-    if metric_name in HIGHER_IS_BETTER:
-        return "higher_is_better"
-    return "lower_is_better"
-
-
-def _metric_group_for(metric_name: str) -> str:
-    if metric_name in AGENTIC_METRICS:
-        return "agentic"
-    return "core"
-
-
 def _target_mode_for(
     metric_name: str,
     target_percent: float | None,
 ) -> str | None:
-    if target_percent is None:
-        return None
-    if metric_name in ABSOLUTE_PERCENT_TARGETS:
-        return "absolute_percent"
-    return "improvement_percent"
+    return target_mode_for(metric_name, target_percent)
 
 
 def _meets_target(
