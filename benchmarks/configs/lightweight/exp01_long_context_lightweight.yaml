@@ -1,0 +1,19 @@
+experiment:
+  name: "Long Context 32K (Lightweight)"
+  description: "Lightweight latency and cache hit behavior for long-context requests"
+
+workload:
+  type: "long_context"
+  num_requests: 40
+  context_length: 8192
+  num_users: 8
+  seed: 42
+
+systems:
+  - name: "baseline_vanilla_s3"
+  - name: "baseline_lru_l3"
+  - name: "l3_full"
+
+output:
+  results_path: "benchmarks/results/lightweight/exp01/results.json"
+  report_path: "benchmarks/results/lightweight/exp01/report.md"

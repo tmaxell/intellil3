@@ -1,0 +1,17 @@
+experiment:
+  name: "Eviction Policy Comparison (Lightweight)"
+  description: "Lightweight LRU vs prefix-aware policies under shared prompt reuse"
+
+workload:
+  type: "multi_user_chat"
+  num_users: 20
+  requests_per_user: 6
+  seed: 42
+
+systems:
+  - name: "LRU"
+  - name: "Prefix Reuse"
+
+output:
+  results_path: "benchmarks/results/lightweight/exp04/results.json"
+  report_path: "benchmarks/results/lightweight/exp04/report.md"
