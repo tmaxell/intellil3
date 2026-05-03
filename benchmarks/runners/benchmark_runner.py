@@ -104,6 +104,7 @@ class BenchmarkRunner:
         cache_hits = 0
         prefetched = 0
         useful_prefetch = 0
+        extra_metrics: dict[str, float] = {}
 
         for request in requests:
             start = time.perf_counter()
@@ -115,6 +116,11 @@ class BenchmarkRunner:
             cache_hits += int(result.is_cache_hit)
             prefetched += result.prefetched
             useful_prefetch += result.useful_prefetch
+            for metric_name, metric_value in result.extra_metrics.items():
+                if isinstance(metric_value, int | float):
+                    extra_metrics[metric_name] = (
+                        extra_metrics.get(metric_name, 0.0) + float(metric_value)
+                    )
 
         return Metrics(
             latencies_ms=latencies,
@@ -122,6 +128,11 @@ class BenchmarkRunner:
             total_requests=len(requests),
             prefetched=prefetched,
             useful_prefetch=useful_prefetch,
+            extra_metrics=_finalize_extra_metrics(
+                extra_metrics,
+                total_requests=len(requests),
+                prefetched=prefetched,
+            ),
         )
 
     @staticmethod
@@ -201,6 +212,26 @@ def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
         return FullAgenticL3System()
 
     raise ValueError(f"Unknown benchmark system: {system_key}")
+
+
+def _finalize_extra_metrics(
+    extra_metrics: dict[str, float],
+    total_requests: int,
+    prefetched: int,
+) -> dict[str, float]:
+    finalized = dict(extra_metrics)
+    for metric_name, metric_value in extra_metrics.items():
+        if metric_name.endswith("_rate") and total_requests > 0:
+            finalized[metric_name] = metric_value / total_requests
+    if "prefetch_precision" in finalized:
+        finalized["prefetch_precision"] = (
+            finalized["prefetch_precision"] / prefetched if prefetched > 0 else 0.0
+        )
+    if "prefetch_recall" in finalized:
+        finalized["prefetch_recall"] = (
+            finalized["prefetch_recall"] / total_requests if total_requests > 0 else 0.0
+        )
+    return finalized
 
 
 def main(argv: list[str] | None = None) -> None:

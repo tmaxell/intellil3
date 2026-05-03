@@ -15,6 +15,16 @@ HIGHER_IS_BETTER = {
     "cache_hits",
     "prefetched",
     "useful_prefetch",
+    "recompute_avoided",
+    "tool_wait_hidden_ms",
+    "workflow_cache_hit_rate",
+    "tool_cache_hit_rate",
+    "plan_cache_hit_rate",
+    "prefetch_precision",
+    "prefetch_recall",
+    "latency_saved_ms",
+    "task_success_proxy",
+    "pass_at_k",
 }
 
 NEUTRAL_METRICS = {
@@ -24,6 +34,13 @@ NEUTRAL_METRICS = {
 ABSOLUTE_PERCENT_TARGETS = {
     "cache_hit_rate",
     "prefetch_use_rate",
+    "workflow_cache_hit_rate",
+    "tool_cache_hit_rate",
+    "plan_cache_hit_rate",
+    "prefetch_precision",
+    "prefetch_recall",
+    "task_success_proxy",
+    "pass_at_k",
 }
 
 DEFAULT_TARGETS = {

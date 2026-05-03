@@ -14,6 +14,7 @@ class Metrics:
     total_requests: int = 0
     prefetched: int = 0
     useful_prefetch: int = 0
+    extra_metrics: dict[str, float] = field(default_factory=dict)
 
     @property
     def latency_p50(self) -> float:
@@ -47,7 +48,7 @@ class Metrics:
         return self.total_requests / total_seconds
 
     def as_dict(self) -> dict[str, float | int]:
-        return {
+        metrics = {
             "latency_p50_ms": self.latency_p50,
             "latency_p95_ms": self.latency_p95,
             "latency_p99_ms": self.latency_p99,
@@ -59,6 +60,8 @@ class Metrics:
             "prefetched": self.prefetched,
             "useful_prefetch": self.useful_prefetch,
         }
+        metrics.update(self.extra_metrics)
+        return metrics
 
 
 def _percentile(values: list[float], percentile: int) -> float:

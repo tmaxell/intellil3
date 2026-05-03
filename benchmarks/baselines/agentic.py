@@ -27,23 +27,30 @@ class AgentLRUBaseline(BenchmarkSystem):
         self._recent_steps: list[str] = []
 
     def process(self, request: BenchmarkRequest) -> ProcessResult:
-        step_id = str(request.metadata.get("step_id", ""))
         workflow_id = str(request.metadata.get("workflow_id", ""))
         cache_key = f"{workflow_id}:{request.metadata.get('agent_id', '')}"
         is_hit = cache_key in self._recent_steps
-        self._touch(cache_key)
+        evicted = self._touch(cache_key)
 
         return ProcessResult(
             latency_ms=_agent_latency(request, base_ms=145.0, cache_hit=is_hit),
             is_cache_hit=is_hit,
+            extra_metrics={
+                "kv_reload_count": int(not is_hit),
+                "kv_recompute_count": int(not is_hit),
+                "l2_eviction_count": int(evicted),
+                "l3_read_count": int(not is_hit),
+            },
         )
 
-    def _touch(self, key: str) -> None:
+    def _touch(self, key: str) -> bool:
         if key in self._recent_steps:
             self._recent_steps.remove(key)
         self._recent_steps.append(key)
         if len(self._recent_steps) > self._capacity:
             self._recent_steps.pop(0)
+            return True
+        return False
 
 
 class AgentTTLSystem(BenchmarkSystem):
@@ -65,6 +72,12 @@ class AgentTTLSystem(BenchmarkSystem):
                 discount_ms=hidden_wait_ms * 0.25,
             ),
             is_cache_hit=pinned,
+            extra_metrics={
+                "kv_reload_count": int(not pinned and has_tool),
+                "recompute_avoided": int(pinned),
+                "tool_wait_hidden_ms": hidden_wait_ms,
+                "l3_write_count": int(has_tool and not pinned),
+            },
         )
 
 
@@ -87,6 +100,11 @@ class WorkflowAwareEvictionSystem(BenchmarkSystem):
         return ProcessResult(
             latency_ms=_agent_latency(request, base_ms=118.0, cache_hit=is_hit),
             is_cache_hit=is_hit,
+            extra_metrics={
+                "workflow_cache_hit_rate": int(is_hit),
+                "kv_reload_count": int(not is_hit),
+                "l3_read_count": int(not is_hit),
+            },
         )
 
 
@@ -101,14 +119,23 @@ class AgentPrefetchSystem(BenchmarkSystem):
     def process(self, request: BenchmarkRequest) -> ProcessResult:
         step_id = str(request.metadata.get("step_id", ""))
         parent_step_id = str(request.metadata.get("parent_step_id", ""))
+        prefetched = bool(parent_step_id)
         is_useful = bool(parent_step_id and parent_step_id in self._processed_steps)
         self._processed_steps.add(step_id)
 
         return ProcessResult(
             latency_ms=_agent_latency(request, base_ms=112.0, cache_hit=is_useful),
             is_cache_hit=is_useful,
-            prefetched=int(bool(parent_step_id)),
+            prefetched=int(prefetched),
             useful_prefetch=int(is_useful),
+            extra_metrics={
+                "prefetch_precision": int(is_useful),
+                "prefetch_recall": int(is_useful),
+                "wasted_prefetch_bytes": (
+                    0.0 if is_useful or not prefetched else _prefetch_bytes(request)
+                ),
+                "latency_saved_ms": 35.0 if is_useful else 0.0,
+            },
         )
 
 
@@ -129,6 +156,7 @@ class FullAgenticL3System(BenchmarkSystem):
         plan_id = str(request.metadata.get("plan_id", ""))
         tool_hit = bool(tool_key and tool_key in self._seen_tools)
         plan_hit = bool(plan_id and plan_id in self._seen_plans)
+        prefetched = bool(parent_step_id)
         prefetch_hit = bool(parent_step_id and parent_step_id in self._processed_steps)
         cache_hit = tool_hit or plan_hit or prefetch_hit
 
@@ -146,8 +174,22 @@ class FullAgenticL3System(BenchmarkSystem):
                 discount_ms=18.0 if tool_hit else 10.0 if plan_hit else 0.0,
             ),
             is_cache_hit=cache_hit,
-            prefetched=int(bool(request.metadata.get("parent_step_id", ""))),
+            prefetched=int(prefetched),
             useful_prefetch=int(prefetch_hit),
+            extra_metrics={
+                "workflow_cache_hit_rate": int(prefetch_hit),
+                "tool_cache_hit_rate": int(tool_hit),
+                "plan_cache_hit_rate": int(plan_hit),
+                "recompute_avoided": int(cache_hit),
+                "kv_reload_count": int(not cache_hit),
+                "l3_read_count": int(not cache_hit),
+                "l3_write_count": int(not cache_hit),
+                "prefetch_precision": int(prefetch_hit),
+                "prefetch_recall": int(prefetch_hit),
+                "wasted_prefetch_bytes": (
+                    0.0 if prefetch_hit or not prefetched else _prefetch_bytes(request)
+                ),
+            },
         )
 
 
@@ -192,6 +234,12 @@ def _stable_jitter(
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     unit = int(digest[:8], 16) / 0xFFFFFFFF
     return unit * spread_ms
+
+
+def _prefetch_bytes(request: BenchmarkRequest) -> float:
+    prompt_bytes = len(request.prompt.encode("utf-8"))
+    l3_latency = float(request.metadata.get("l3_latency_ms", 0.0))
+    return float(prompt_bytes + int(l3_latency * 128))
 
 
 AGENTIC_SYSTEMS: dict[str, type[BenchmarkSystem]] = {
