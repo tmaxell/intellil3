@@ -203,14 +203,22 @@ def _build_system(system_key: str, workload_type: str) -> BenchmarkSystem:
 
     if key in {"noop"}:
         return NoOpSystem()
-    if key in {"baseline_no_system", "direct_object_storage", "vanilla_s3", "b0"}:
+    if key in {
+        "baseline_no_system",
+        "baseline_vanilla_s3",
+        "direct_object_storage",
+        "vanilla_s3",
+        "b0",
+    }:
         return NoSystemBaseline()
     if key in {"current_intellil3", "l3_full", "l3_measurement_system", "b1"}:
         return SyntheticL3System()
-    if key in {"agent_lru", "baseline_lru", "lru_l3", "lru", "b2"}:
+    if key in {"agent_lru", "baseline_lru", "baseline_lru_l3", "lru_l3", "lru", "b2"}:
         if workload_type == "agentic_workflow":
             return AgentLRUBaseline()
         return NoSystemBaseline()
+    if key in {"prefix reuse", "prefix_reuse", "prefix-reuse"}:
+        return SyntheticL3System()
     if key in {"agent_ttl", "agent_ttl_only", "b3"}:
         return AgentTTLSystem()
     if key in {"workflow_aware_eviction", "workflow_aware_l3", "workflow_aware", "b4"}:

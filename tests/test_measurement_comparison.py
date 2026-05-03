@@ -9,7 +9,11 @@ from benchmarks.measurement.run_all_comparisons import (
     render_comparison_index_csv,
     render_comparison_index_markdown,
 )
-from benchmarks.measurement.run_comparison import _parse_targets, run_comparison
+from benchmarks.measurement.run_comparison import (
+    _parse_targets,
+    _resolve_comparison_systems,
+    run_comparison,
+)
 from benchmarks.measurement.run_measurement import MeasurementSummary
 
 
@@ -62,8 +66,12 @@ def test_render_comparison_outputs_status_columns() -> None:
 
     assert "Status" in markdown
     assert "Group" in markdown
+    assert "Summary" in markdown
+    assert "Improved metrics" in markdown
     assert "latency_p95_ms" in csv_text
     assert "metric_group" in csv_text
+    assert "effect_size" in csv_text
+    assert "p_value" in csv_text
     assert "meets_target" in csv_text
 
 
@@ -165,6 +173,21 @@ systems:
     assert (tmp_path / "results" / "comparison.csv").exists()
 
 
+def test_resolve_comparison_systems_uses_last_candidate() -> None:
+    baseline, candidate = _resolve_comparison_systems(
+        {
+            "baseline_vanilla_s3": {},
+            "baseline_lru_l3": {},
+            "l3_full": {},
+        },
+        baseline_system=None,
+        candidate_system=None,
+    )
+
+    assert baseline == "baseline_vanilla_s3"
+    assert candidate == "l3_full"
+
+
 def _summary() -> MeasurementSummary:
     return MeasurementSummary(
         experiment_name="comparison test",
@@ -177,6 +200,7 @@ def _summary() -> MeasurementSummary:
                     "std": 10.0,
                     "min": 190.0,
                     "max": 210.0,
+                    "samples": [200.0, 210.0, 190.0],
                 },
                 "throughput_req_s": {
                     "mean": 50.0,
@@ -197,6 +221,7 @@ def _summary() -> MeasurementSummary:
                     "std": 5.0,
                     "min": 95.0,
                     "max": 105.0,
+                    "samples": [100.0, 105.0, 95.0],
                 },
                 "throughput_req_s": {
                     "mean": 100.0,

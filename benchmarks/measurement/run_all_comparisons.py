@@ -7,36 +7,8 @@ from io import StringIO
 from pathlib import Path
 
 from benchmarks.measurement.comparison import SystemComparison
+from benchmarks.measurement.metric_catalog import KEY_METRICS
 from benchmarks.measurement.run_comparison import _parse_targets, run_comparison
-
-
-CORE_KEY_METRICS = [
-    "latency_p50_ms",
-    "latency_p95_ms",
-    "latency_p99_ms",
-    "throughput_req_s",
-    "cache_hit_rate",
-    "prefetch_use_rate",
-]
-
-AGENTIC_KEY_METRICS = [
-    "workflow_cache_hit_rate",
-    "tool_cache_hit_rate",
-    "plan_cache_hit_rate",
-    "prefetch_precision",
-    "prefetch_recall",
-    "kv_reload_count",
-    "kv_recompute_count",
-    "recompute_avoided",
-    "tool_wait_hidden_ms",
-    "latency_saved_ms",
-    "wasted_prefetch_bytes",
-    "l2_eviction_count",
-    "l3_read_count",
-    "l3_write_count",
-]
-
-KEY_METRICS = CORE_KEY_METRICS + AGENTIC_KEY_METRICS
 
 
 def run_all_comparisons(

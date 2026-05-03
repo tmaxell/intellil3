@@ -171,6 +171,32 @@ def test_benchmark_runner_builds_agentic_systems_from_config() -> None:
     assert results[0].metrics.total_requests == 4
 
 
+def test_benchmark_runner_builds_legacy_system_aliases() -> None:
+    config = {
+        "experiment": {"name": "Legacy aliases"},
+        "workload": {
+            "type": "multi_user_chat",
+            "num_users": 1,
+            "requests_per_user": 2,
+            "seed": 6,
+        },
+        "systems": [
+            {"name": "baseline_vanilla_s3"},
+            {"name": "baseline_lru_l3"},
+            {"name": "Prefix Reuse"},
+        ],
+    }
+
+    results = BenchmarkRunner(config).run()
+
+    assert [result.system_name for result in results] == [
+        "baseline_vanilla_s3",
+        "baseline_lru_l3",
+        "Prefix Reuse",
+    ]
+    assert all(result.metrics.total_requests == 2 for result in results)
+
+
 def test_measurement_suite_uses_configured_systems(tmp_path) -> None:
     config_path = tmp_path / "agentic.yaml"
     config_path.write_text(

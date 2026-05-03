@@ -110,8 +110,8 @@ def _resolve_comparison_systems(
         if len(system_names) < 2:
             raise ValueError("Cannot infer candidate system: fewer than two systems")
         candidate_system = next(
-            (name for name in system_names if name != baseline_system),
-            system_names[1],
+            (name for name in reversed(system_names) if name != baseline_system),
+            system_names[-1],
         )
     return baseline_system, candidate_system
 

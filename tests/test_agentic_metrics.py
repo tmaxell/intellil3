@@ -62,6 +62,7 @@ def test_benchmark_runner_aggregates_agentic_extra_metrics() -> None:
     assert full_metrics["job_completion_time_p95"] > 0.0
     assert full_metrics["step_latency_p95"] > 0.0
     assert full_metrics["ttft_per_step"] > 0.0
+    assert full_metrics["latency_saved_ms"] > 0.0
     assert "network_io_overhead" in full_metrics
 
 
