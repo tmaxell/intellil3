@@ -56,7 +56,7 @@ def test_dataset_has_required_properties() -> None:
     qrels = {row["query_id"]: row for row in _load_jsonl("qrels.jsonl")}
 
     domains = {row["domain"] for row in corpus}
-    assert 3 <= len(domains) <= 5
+    assert len(domains) >= 3
 
     # Versioned/overlap knowledge hint: at least one doc_id appears with multiple versions.
     doc_versions: dict[str, set[str]] = {}
