@@ -1,0 +1,35 @@
+experiment:
+  name: "RAG Heavy (Real Storage Memory Backend)"
+  description: "Retrieval-heavy workload executed through real UnifiedObjectStore-backed systems"
+
+benchmark:
+  execution_mode: "real_storage"
+  real_storage:
+    backend: "memory"
+    config_path: "configs/default.yaml"
+    object_pool_size: 64
+    kv_tokens_per_object: 16
+    kv_vector_size: 16
+    model_name: "benchmark-model"
+    # Simulate realistic S3 round-trip latency for the vanilla baseline so that
+    # the comparison reflects actual remote-storage access cost, not Python dict
+    # lookup speed.  Typical AWS S3 GET: 20–80 ms depending on region/object size.
+    simulated_s3_latency_ms: 55.0
+
+workload:
+  type: "rag_heavy"
+  num_requests: 100
+  documents_per_request: 10
+  chunk_size: 512
+  seed: 42
+
+systems:
+  - name: "baseline_vanilla_s3"
+  - name: "baseline_lru_l3"
+    type: "lru_l3"
+  - name: "l3_full"
+    type: "l3_full"
+
+output:
+  results_path: "benchmarks/results/exp02_real_storage/results.json"
+  report_path: "benchmarks/results/exp02_real_storage/report.md"

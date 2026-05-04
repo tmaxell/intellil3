@@ -1,0 +1,17 @@
+{
+  "policy_version": "retail-v1",
+  "rules": {
+    "return_window_days": 30,
+    "eligible_order_statuses": ["delivered"],
+    "non_returnable_categories": [],
+    "supported_refund_methods": ["card", "store_credit", "paypal"],
+    "allow_partial_refund": true,
+    "exchange_requires_active_sku": true,
+    "deny_same_sku_exchange": true
+  },
+  "fallbacks": {
+    "exchange_unavailable": "offer_refund_or_store_credit",
+    "policy_violation": "deny_with_policy_reason",
+    "order_not_found": "deny_with_not_found_reason"
+  }
+}

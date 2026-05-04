@@ -1,0 +1,24 @@
+experiment:
+  name: "Agentic Tool/RAG Heavy (Lightweight)"
+  description: "Lightweight synthetic tool and RAG-heavy workflow"
+
+workload:
+  type: "agentic_workflow"
+  scenario: "tool_rag"
+  num_workflows: 10
+  num_agents: 2
+  turns_per_workflow: 4
+  shared_system_prompt_ratio: 0.7
+  tool_call_probability: 0.75
+  tool_latency_distribution: [120.0, 700.0]
+  rag_call_probability: 0.7
+  branching_factor: 1.0
+  plan_reuse_probability: 0.5
+  context_growth_per_turn: 112
+  seed: 44
+
+systems:
+  - name: "current_intellil3"
+    type: "l3_full"
+  - name: "tool_cache"
+    type: "agentic_tool_cache"

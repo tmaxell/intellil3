@@ -1,0 +1,18 @@
+experiment:
+  name: "RAG Heavy (Lightweight)"
+  description: "Lightweight retrieval-heavy prompts with repeated document chunks"
+
+workload:
+  type: "rag_heavy"
+  num_requests: 40
+  documents_per_request: 4
+  chunk_size: 256
+  seed: 42
+
+systems:
+  - name: "baseline_vanilla_s3"
+  - name: "l3_full"
+
+output:
+  results_path: "benchmarks/results/lightweight/exp02/results.json"
+  report_path: "benchmarks/results/lightweight/exp02/report.md"

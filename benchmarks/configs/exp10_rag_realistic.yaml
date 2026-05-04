@@ -1,0 +1,30 @@
+experiment:
+  name: "Realistic RAG"
+  description: "Evidence-grounded RAG benchmark with deterministic retrieval simulation and rule-based answer scoring"
+
+workload:
+  type: "rag_realistic"
+  data_dir: "benchmarks/data/rag_realistic"
+  num_queries: 20
+  retrieval_top_k: 5
+  noise_level: 0.2
+  version_preference: "latest"
+  retrieval_mode: "baseline"
+  seed: 42
+  interarrival_seconds: 0.2
+
+systems:
+  - name: "rag_realistic_baseline"
+    type: "rag_realistic_baseline"
+  - name: "rag_realistic_enhanced"
+    type: "rag_realistic_enhanced"
+
+metrics:
+  - evidence_recall
+  - evidence_precision
+  - answer_correctness
+  - groundedness
+  - abstention_correctness
+  - rag_task_success
+  - latency_p95_ms
+  - cache_hit_rate

@@ -10,6 +10,7 @@ from benchmarks.measurement.comparison import (
     render_comparison_report,
 )
 from benchmarks.measurement.run_measurement import MeasurementSuite
+from benchmarks.measurement.run_summary import build_from_comparison, write_run_summary
 
 
 def run_comparison(
@@ -51,6 +52,7 @@ def run_comparison(
         render_comparison_csv(comparison),
         encoding="utf-8",
     )
+    write_run_summary(build_from_comparison(comparison), output_path)
     return comparison
 
 

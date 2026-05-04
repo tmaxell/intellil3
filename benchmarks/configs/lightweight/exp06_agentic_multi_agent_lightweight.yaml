@@ -1,0 +1,24 @@
+experiment:
+  name: "Agentic Multi-Agent Pipeline (Lightweight)"
+  description: "Lightweight synthetic multi-agent workflow for workflow-aware eviction"
+
+workload:
+  type: "agentic_workflow"
+  scenario: "multi_agent"
+  num_workflows: 10
+  num_agents: 2
+  turns_per_workflow: 5
+  shared_system_prompt_ratio: 0.75
+  tool_call_probability: 0.55
+  tool_latency_distribution: [80.0, 500.0]
+  rag_call_probability: 0.2
+  branching_factor: 1.0
+  plan_reuse_probability: 0.5
+  context_growth_per_turn: 80
+  seed: 43
+
+systems:
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "workflow_aware"
+    type: "workflow_aware_l3"
