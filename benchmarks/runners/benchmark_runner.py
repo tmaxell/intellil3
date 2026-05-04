@@ -288,9 +288,15 @@ def _build_real_storage_system(
         "vanilla_s3",
         "b0",
     }:
+        simulated_s3_latency_ms = float(
+            config.get("benchmark", {})
+            .get("real_storage", {})
+            .get("simulated_s3_latency_ms", 0.0)
+        )
         return VanillaS3Baseline(
             backend=backend,
             key_prefix=l3_config.objects.kv_cache.key_prefix,
+            simulated_s3_latency_ms=simulated_s3_latency_ms,
         )
     if key in {"agent_lru", "baseline_lru", "baseline_lru_l3", "lru_l3", "lru", "b2"}:
         return LRUL3Baseline(store=store)

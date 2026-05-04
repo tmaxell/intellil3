@@ -18,7 +18,7 @@ workload:
   seed: 44
 
 systems:
-  - name: "current_intellil3"
-    type: "l3_full"
-  - name: "tool_cache"
+  - name: "baseline_lru"
+    type: "lru_l3"
+  - name: "agentic_tool_cache"
     type: "agentic_tool_cache"

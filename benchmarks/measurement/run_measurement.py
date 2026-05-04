@@ -60,9 +60,20 @@ class MeasurementSuite:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         raw_runs = []
 
+        import copy, yaml as _yaml
+        with open(self.config_path, encoding="utf-8") as _f:
+            _base_config = _yaml.safe_load(_f)
+
         for repetition in range(self.repetitions):
-            runner = BenchmarkRunner.from_yaml(
-                self.config_path,
+            # Vary the workload seed per repetition so that each run produces
+            # slightly different request timing / jitter → non-zero std across
+            # repetitions, which is required for meaningful statistical tests.
+            rep_config = copy.deepcopy(_base_config)
+            base_seed = int(rep_config.get("workload", {}).get("seed", 42))
+            rep_config["workload"]["seed"] = base_seed + repetition * 1337
+
+            runner = BenchmarkRunner(
+                rep_config,
                 systems=self._build_systems(),
             )
             results = [result.as_dict() for result in runner.run()]
