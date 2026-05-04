@@ -18,8 +18,8 @@ benchmarks/results/*/raw/
 benchmarks/results/*/*.npy
 benchmarks/results/*/*.npz
 
-# Local planning drafts
-docs/
+# Local planning drafts (individual files can be force-added)
+# docs/
 
 # MinIO data
 minio_data/

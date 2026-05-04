@@ -1,0 +1,27 @@
+# IntelliL3 configuration for Docker / container deployments.
+# Uses "minio" as the S3 hostname — matches the service name in docker-compose.
+# All values can be overridden at runtime via environment variables
+# (see deploy/docker/entrypoint.sh).
+
+storage:
+  backend: s3
+  endpoint_url: "http://minio:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "l3-llm-store"
+  region: "us-east-1"
+
+objects:
+  kv_cache:
+    block_size: 16
+    key_prefix: "kv/"
+  rag:
+    key_prefix: "rag/"
+  semantic_cache:
+    key_prefix: "sem/"
+  agent:
+    workflows_prefix: "agent/workflows/"
+    steps_prefix: "agent/steps/"
+    tools_prefix: "agent/tools/"
+    plans_prefix: "agent/plans/"
+    traces_prefix: "agent/traces/"

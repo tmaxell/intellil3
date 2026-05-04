@@ -83,12 +83,47 @@ pip install -e ".[all]"
 
 ---
 
-## Quick Start
+## Docker
 
-**1. Start local object storage (MinIO)**
+The fastest way to run the full stack (IntelliL3 gRPC service + MinIO):
 
 ```bash
-docker compose -f deploy/docker/docker-compose.yaml up -d
+# Build image and start both services
+docker compose -f deploy/docker/docker-compose.yaml up --build -d
+
+# IntelliL3 gRPC → localhost:50051
+# MinIO S3 API   → localhost:9000
+# MinIO console  → http://localhost:9001  (minioadmin / minioadmin)
+```
+
+To point at real AWS S3 instead of MinIO, override the environment variables
+without rebuilding the image:
+
+```bash
+L3_ENDPOINT_URL=https://s3.amazonaws.com \
+L3_ACCESS_KEY=<key> \
+L3_SECRET_KEY=<secret> \
+L3_BUCKET=my-bucket \
+docker compose -f deploy/docker/docker-compose.yaml up l3store -d
+```
+
+See [`docs/llm_integration_plan.md`](docs/llm_integration_plan.md) for a
+step-by-step plan to wire IntelliL3 into vLLM, SGLang, and LangChain.
+
+---
+
+## Quick Start
+
+**1. Start the full stack with Docker** *(recommended)*
+
+```bash
+docker compose -f deploy/docker/docker-compose.yaml up --build -d
+```
+
+**Or start MinIO only** and run l3store locally:
+
+```bash
+docker compose -f deploy/docker/docker-compose.yaml up minio -d
 ```
 
 **2. Run the quickstart example**

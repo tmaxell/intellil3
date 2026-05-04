@@ -1,20 +1,65 @@
 services:
+
+  # ── MinIO (S3-compatible object store, tier L3) ───────────────────────────
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console  →  http://localhost:9001
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
       interval: 5s
       timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # ── IntelliL3 gRPC service ────────────────────────────────────────────────
+  l3store:
+    build:
+      context: ../..       # repo root (where Dockerfile lives)
+      dockerfile: Dockerfile
+    image: intellil3:latest
+    ports:
+      - "50051:50051"      # gRPC endpoint consumed by LLM inference clients
+    environment:
+      L3_ENDPOINT_URL: http://minio:9000
+      L3_ACCESS_KEY: minioadmin
+      L3_SECRET_KEY: minioadmin
+      L3_BUCKET: l3-llm-store
+      L3_PORT: "50051"
+      L3_WORKERS: "16"
+      L3_LOG_LEVEL: INFO
+      # To point at real AWS S3, override without rebuilding:
+      # L3_ENDPOINT_URL: https://s3.amazonaws.com
+      # L3_ACCESS_KEY: <AWS_ACCESS_KEY_ID>
+      # L3_SECRET_KEY: <AWS_SECRET_ACCESS_KEY>
+      # L3_BUCKET: my-production-bucket
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - |
+          import grpc, sys, os
+          from l3store.api.proto import l3_service_pb2 as pb, l3_service_pb2_grpc as svc
+          ch = grpc.insecure_channel(f"localhost:{os.environ.get('L3_PORT','50051')}")
+          stub = svc.L3ServiceStub(ch)
+          stub.GetStats(pb.GetStatsRequest(), timeout=3)
+          sys.exit(0)
+      interval: 15s
+      timeout: 8s
+      start_period: 20s
       retries: 5
+    restart: unless-stopped
 
 volumes:
   minio_data:
