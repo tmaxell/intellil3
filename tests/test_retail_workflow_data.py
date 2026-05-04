@@ -67,18 +67,27 @@ def test_order_item_product_references_are_consistent() -> None:
         if order_id != "ORD-9999":
             assert order_id in order_ids
         requested_item = task["input"].get("requested_item_id")
-        if requested_item is not None:
+        if requested_item is not None and requested_item != "all":
             assert requested_item in item_ids
 
 
 def test_required_tools_are_from_supported_toolset() -> None:
     tasks = _load("tasks.json")
+    # Extended in dataset v2 to cover damage verification, inventory, cancellation,
+    # manager escalation, refund history checks, loyalty and resellability lookups.
     supported_tools = {
         "get_order",
         "search_policy",
         "calculate_refund",
         "submit_refund",
         "update_return_request",
+        "verify_damage",
+        "check_inventory",
+        "cancel_order",
+        "escalate_to_manager",
+        "check_refund_history",
+        "check_loyalty_balance",
+        "check_resellability",
     }
     for task in tasks:
         for tool_name in task["required_tools"]:
