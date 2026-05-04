@@ -511,10 +511,10 @@ def _finalize_extra_metrics(
             _mean([latency * 0.35 for latency in latencies_ms]),
         )
     if "network_io_overhead" not in finalized:
-        finalized["network_io_overhead"] = (
-            finalized.get("l3_read_count", 0.0)
-            + finalized.get("l3_write_count", 0.0)
-        )
+        l3_reads = finalized.get("l3_read_count", 0.0)
+        l3_writes = finalized.get("l3_write_count", 0.0)
+        if l3_reads or l3_writes:
+            finalized["network_io_overhead"] = l3_reads + l3_writes
     _average_rag_metrics(finalized, total_requests)
     return finalized
 
