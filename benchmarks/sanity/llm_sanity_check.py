@@ -174,6 +174,8 @@ class LLMSanityChecker:
         return responses, latencies, error
 
     def _save(self, report: SanityCheckReport) -> None:
+        from benchmarks.measurement.run_summary import build_from_sanity, write_run_summary
+
         out = pathlib.Path(self.config.output_dir)
         out.mkdir(parents=True, exist_ok=True)
 
@@ -184,6 +186,7 @@ class LLMSanityChecker:
         (out / f"sanity_{report.mode}_{ts}.md").write_text(
             _render_markdown(report), encoding="utf-8"
         )
+        write_run_summary(build_from_sanity(report), out)
 
 
 # ---------------------------------------------------------------------------

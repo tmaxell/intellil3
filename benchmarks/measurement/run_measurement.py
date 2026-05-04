@@ -11,6 +11,7 @@ import numpy as np
 from benchmarks.baselines.base import BenchmarkSystem
 from benchmarks.measurement.environment import collect_environment
 from benchmarks.runners.benchmark_runner import BenchmarkRunner, NoOpSystem
+from benchmarks.measurement.run_summary import build_from_measurement, write_run_summary
 
 
 @dataclass(frozen=True)
@@ -125,6 +126,7 @@ class MeasurementSuite:
             encoding="utf-8",
         )
         report_path.write_text(render_measurement_report(summary), encoding="utf-8")
+        write_run_summary(build_from_measurement(summary), self.output_dir)
 
     def _build_systems(self) -> list[BenchmarkSystem] | None:
         if self.system_factory is not None:
